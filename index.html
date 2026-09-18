@@ -32,9 +32,10 @@
 :root {
   --bg: #EEF1F4; --surface: #FFFFFF; --surface-2: #F6F8FA;
   --line: #D9DFE5; --line-strong: #B9C2CB;
-  --text: #1B2430; --text-2: #55606B; --text-3: #8391A0;
-  --accent: #0F5C6E; --accent-soft: #DCEBEF; --accent-ink: #0B4553; --on-accent: #FFFFFF;
-  --meter-track: #CFE3E8;
+  --text: #14313F; --text-2: #4F6473; --text-3: #7F93A1;
+  --accent: #0F9488; --accent-soft: #DDF3F0; --accent-ink: #0B6B62; --on-accent: #FFFFFF;
+  --meter-track: #C9ECE8;
+  --logo-a: #123B4D; --logo-b: #0FA396;
   --good: #0ca30c; --good-ink: #0A6B0A; --good-soft: #E3F5E3;
   --warn: #fab219; --warn-ink: #7A5200; --warn-soft: #FFF3D6;
   --crit: #d03b3b; --crit-ink: #A32B2B; --crit-soft: #FBE4E4;
@@ -48,8 +49,9 @@
     --bg: #12171C; --surface: #1B2229; --surface-2: #222B33;
     --line: #2E3843; --line-strong: #46525E;
     --text: #E6EAEE; --text-2: #A7B1BB; --text-3: #77838F;
-    --accent: #5BB7C9; --accent-soft: #163640; --accent-ink: #8ED2DF; --on-accent: #0E1A1E;
-    --meter-track: #1E3E47;
+    --accent: #2FC4B7; --accent-soft: #123F3B; --accent-ink: #7FE0D6; --on-accent: #062622;
+    --meter-track: #1B4744;
+    --logo-a: #CFE3EC; --logo-b: #2FC4B7;
     --good-ink: #6CD16C; --good-soft: #163A16;
     --warn-ink: #F5C452; --warn-soft: #3D2E08;
     --crit-ink: #F08C8C; --crit-soft: #431C1C;
@@ -80,7 +82,7 @@ body {
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
   padding: calc(env(safe-area-inset-top, 0px) + 8px) 16px 6px;
 }
-.brand { font-weight: 800; font-size: 17px; letter-spacing: .06em; color: var(--accent-ink); }
+.brand, .side-brand { font-family: "Avenir Next", Avenir, "Century Gothic", "Segoe UI", system-ui, sans-serif; font-weight: 700; font-size: 18px; letter-spacing: .01em; color: var(--logo-a); }
 .hdr .date { font-size: 13px; color: var(--text-2); }
 .hdr .status { font-size: 11px; color: var(--text-3); display: flex; align-items: center; gap: 5px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); display: inline-block; }
@@ -105,7 +107,7 @@ body {
   body { padding: 16px; }
   .app { max-width: 940px; margin-inline: auto; display: grid; grid-template-columns: 210px minmax(0, 1fr); grid-template-rows: auto 1fr; column-gap: 20px; }
   .nav { grid-row: 1 / span 2; position: sticky; top: 16px; align-self: start; display: flex; flex-direction: column; gap: 2px; border: 1px solid var(--line); border-radius: 14px; padding: 10px; }
-  .nav .side-brand { display: block; font-weight: 800; font-size: 17px; letter-spacing: .06em; padding: 6px 12px 10px; color: var(--accent-ink); }
+  .nav .side-brand { display: flex; align-items: center; gap: 8px; padding: 6px 12px 10px; }
   .nav-btn { flex-direction: row; gap: 10px; font-size: 14px; padding: 10px 12px; height: auto; border-radius: 10px; }
   .nav-btn.active { background: var(--accent-soft); }
   .nav-fab { order: 99; margin-top: 8px; flex-direction: row; gap: 10px; height: auto; padding: 10px 12px; border-radius: 10px; background: var(--accent); color: var(--on-accent); font-size: 14px; }
@@ -269,7 +271,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
 <body>
 <div class="app">
   <nav class="nav" aria-label="メニュー">
-    <div class="side-brand">Yohaku</div>
+    <div class="side-brand"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5V16.5A3.5 3.5 0 0 0 7.5 20H14.5" fill="none" stroke="var(--logo-a)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 4H16.5A3.5 3.5 0 0 1 20 7.5V14.5" fill="none" stroke="var(--logo-b)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Yohaku</span></div>
     <button type="button" class="nav-btn active" data-tab="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>ホーム</span></button>
     <button type="button" class="nav-btn" data-tab="input"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L18 10l-4-4L4 16v4z"/><path d="M13 7l4 4"/></svg><span>入力</span></button>
     <button type="button" class="nav-fab" id="fab" aria-label="使った金額を記録"><span class="disc">＋</span><span>使った</span></button>
@@ -278,7 +280,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   </nav>
 
   <header class="hdr">
-    <div style="display:flex;align-items:center;gap:8px"><svg class="mark" width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><rect width="22" height="22" rx="5.5" fill="var(--accent)"/><rect x="5" y="4" width="12" height="14" rx="2.2" fill="#fff"/><path d="M5 6.2A2.2 2.2 0 0 1 7.2 4h7.6A2.2 2.2 0 0 1 17 6.2V12H5z" fill="var(--meter-track)"/></svg><span class="brand">Yohaku</span><span class="date" id="today"></span></div>
+    <div style="display:flex;align-items:center;gap:8px"><svg class="mark" width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 8.5V16.5A3.5 3.5 0 0 0 7.5 20H14.5" fill="none" stroke="var(--logo-a)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/><path d="M8.5 4H16.5A3.5 3.5 0 0 1 20 7.5V14.5" fill="none" stroke="var(--logo-b)" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="brand">Yohaku</span><span class="date" id="today"></span></div>
     <div class="status"><span class="dot"></span><span id="conn">この端末に保存</span></div>
   </header>
 
