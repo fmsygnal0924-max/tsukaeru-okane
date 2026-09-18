@@ -71,9 +71,10 @@ body {
 @media (max-width: 819px) {
   body { position: fixed; inset: 0; width: 100%; overflow: hidden; }
   .app { height: 100%; display: flex; flex-direction: column; }
-  .hdr { flex: none; }
-  .main { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
-  .nav { flex: none; }
+  .hdr { flex: none; order: 1; }
+  .main { flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; order: 2; }
+  .nav { flex: none; order: 3; }
+  body.pad-open .main { padding-bottom: 300px; }
 }
 .hdr {
   display: flex; justify-content: space-between; align-items: center; gap: 8px;
@@ -248,6 +249,20 @@ td.pos { color: var(--good-ink); }
 .sheet .lbl { font-size: 11px; font-weight: 600; letter-spacing: .06em; color: var(--text-3); margin-bottom: -4px; }
 .effect { font-size: 12px; color: var(--text-2); background: var(--surface-2); border-radius: 8px; padding: 6px 10px; }
 @media (min-width: 820px) { .sheet-backdrop { align-items: center; } }
+body.pad-open .sheet-backdrop { align-items: flex-start; }
+body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
+
+/* ---- in-app number pad: fixed at the bottom, never moves the page ---- */
+.pad { position: fixed; left: 0; right: 0; bottom: 0; z-index: 40; background: var(--surface); border-top: 1px solid var(--line); padding: 8px 8px calc(8px + env(safe-area-inset-bottom, 0px)); box-shadow: 0 -6px 18px rgba(27,36,48,.08); }
+.pad-grid { display: grid; grid-template-columns: repeat(4, 1fr); grid-auto-rows: 54px; gap: 6px; max-width: 520px; margin-inline: auto; }
+.pad-grid button { font: inherit; font-size: 24px; font-weight: 600; font-variant-numeric: tabular-nums; border: 0; border-radius: 10px; background: var(--surface-2); color: var(--text); cursor: pointer; user-select: none; }
+.pad-grid button.fn { font-size: 18px; color: var(--text-2); }
+.pad-grid button.done { grid-row: span 2; background: var(--accent); color: var(--on-accent); font-size: 16px; }
+.pad-grid button.zero { grid-column: span 3; }
+.pad-grid button:active { background: var(--accent-soft); }
+.pad-grid button.done:active { opacity: .85; }
+.pad-grid button:focus-visible { outline: 2px solid var(--focus); }
+.input.editing { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 2px var(--accent-soft); }
 @media (prefers-reduced-motion: reduce) { .meter .fill { transition: none; } }
 </style>
 </head>
@@ -441,6 +456,16 @@ td.pos { color: var(--good-ink); }
     <input class="input sm txt" id="sp-memo" placeholder="メモ（任意）" autocomplete="off" enterkeyhint="done">
     <button class="btn wide" id="sp-save">記録する</button>
     <span class="toast err" id="sp-err" aria-live="polite"></span>
+  </div>
+</div>
+
+<!-- ===== NUMBER PAD ===== -->
+<div class="pad" id="pad" hidden role="group" aria-label="数字キー">
+  <div class="pad-grid">
+    <button type="button" data-k="7">7</button><button type="button" data-k="8">8</button><button type="button" data-k="9">9</button><button type="button" data-k="bs" class="fn" aria-label="1文字消す">⌫</button>
+    <button type="button" data-k="4">4</button><button type="button" data-k="5">5</button><button type="button" data-k="6">6</button><button type="button" data-k="00" class="fn">00</button>
+    <button type="button" data-k="1">1</button><button type="button" data-k="2">2</button><button type="button" data-k="3">3</button><button type="button" data-k="done" class="done">完了</button>
+    <button type="button" data-k="0" class="zero">0</button>
   </div>
 </div>
 
@@ -717,6 +742,7 @@ td.pos { color: var(--good-ink); }
       const d = document.createElement('input'); d.className = 'input'; d.inputMode = 'numeric'; d.value = s.day || ''; d.placeholder = '日'; d.id = 'sub-d-' + s.id; d.setAttribute('aria-label', '引落日');
       const x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', (s.name || 'サブスク') + ' を削除');
       [n, a, d].forEach((el) => el.addEventListener('input', () => { settingsDirty = true; s.name = n.value; s.amount = num(a.value); s.day = Math.min(31, Math.max(1, num(d.value) || 1)); updateSubsTotal(); }));
+      if (typeof bindPad === 'function') { bindPad(a); bindPad(d); }
       x.addEventListener('click', () => { settingsDirty = true; settings.subs = settings.subs.filter((q) => q.id !== s.id); renderSubs(); });
       row.append(n, a, d, x); box.appendChild(row);
     }
@@ -759,9 +785,46 @@ td.pos { color: var(--good-ink); }
     $('sheet').hidden = false;
     $('sp-amount').value = ''; $('sp-memo').value = ''; $('sp-err').textContent = '';
     setMode('spend'); setMethod(LS.get('lastMethod') || 'pay'); setCat('');
-    $('sp-amount').focus();
+    openPad($('sp-amount'));
   }
-  function closeSheet() { $('sheet').hidden = true; }
+  function closeSheet() { $('sheet').hidden = true; closePad(); }
+
+  // ---------- number pad (replaces the OS keyboard for amounts) ----------
+  let padTarget = null;
+  const pad = $('pad');
+  function openPad(el) {
+    if (padTarget && padTarget !== el) padTarget.classList.remove('editing');
+    padTarget = el; el.classList.add('editing');
+    pad.hidden = false; document.body.classList.add('pad-open');
+    if (!el.closest('.sheet')) setTimeout(() => el.scrollIntoView({ block: 'center', behavior: 'smooth' }), 30);
+  }
+  function closePad() {
+    if (padTarget) { padTarget.classList.remove('editing'); if (padTarget.value.trim() !== '') padTarget.value = yen(num(padTarget.value)); }
+    padTarget = null; pad.hidden = true; document.body.classList.remove('pad-open');
+  }
+  pad.addEventListener('click', (ev) => {
+    const b = ev.target.closest('button'); if (!b || !padTarget) return;
+    const k = b.dataset.k;
+    if (k === 'done') { closePad(); return; }
+    let digits = String(padTarget.value || '').replace(/\D/g, '');
+    if (k === 'bs') digits = digits.slice(0, -1);
+    else { if (digits.length >= 9) return; digits = (digits + k).replace(/^0+(?=\d)/, ''); }
+    padTarget.value = digits ? Number(digits).toLocaleString('ja-JP') : '';
+    padTarget.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+  function bindPad(el) {
+    el.readOnly = true; el.setAttribute('inputmode', 'none');
+    el.addEventListener('focus', () => openPad(el));
+    el.addEventListener('click', () => openPad(el));
+  }
+  document.querySelectorAll('input[inputmode="numeric"]').forEach(bindPad);
+  document.addEventListener('click', (ev) => {
+    if (!padTarget) return;
+    const t = ev.target;
+    if (pad.contains(t) || t === padTarget || (t.closest && t.closest('.sheet'))) return;
+    closePad();
+  }, true);
+  document.querySelectorAll('input:not([readonly]), textarea').forEach((el) => el.addEventListener('focus', () => { if (padTarget) closePad(); }));
   $('fab').addEventListener('click', openSheet);
   $('sheet-x').addEventListener('click', closeSheet);
   $('sheet').addEventListener('click', (ev) => { if (ev.target === $('sheet')) closeSheet(); });
