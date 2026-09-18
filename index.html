@@ -185,6 +185,9 @@ button.chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px
 .meter .fill.warn { background: var(--warn); }
 .meter .fill.crit { background: var(--crit); }
 .meter-legend { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.meter .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--text-2); border-radius: 1px; opacity: .8; }
+.divider { border-top: 1px dashed var(--line); margin: 2px 0; }
+.big.over { color: var(--crit-ink); }
 
 .fields { display: flex; flex-direction: column; gap: 10px; }
 .field { display: grid; grid-template-columns: 1fr; gap: 4px; }
@@ -309,7 +312,15 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         <div class="timeline" id="check-tl" hidden></div>
       </section>
       <section class="card">
-        <div class="section-title"><span>今月の楽天カード</span><span class="sub" id="meter-sub"></span></div>
+        <div class="section-title"><span>今月の生活費</span><span class="sub" id="pace-sub"></span></div>
+        <div class="meter-head">
+          <div class="big"><span id="pace-perday">—</span><small>／日</small></div>
+          <div class="muted" id="pace-left"></div>
+        </div>
+        <div class="meter" role="meter" aria-label="今月の生活費" aria-valuemin="0" id="pace-meter"><div class="fill" id="pace-fill" style="width:0%"></div><div class="tick" id="pace-tick" style="left:0%" title="今日の理想位置"></div></div>
+        <div class="meter-legend" id="pace-legend"></div>
+        <div class="divider"></div>
+        <div class="section-title"><span>楽天カード</span><span class="sub" id="meter-sub"></span></div>
         <div class="meter-head">
           <div class="big"><span id="meter-val">—</span><small id="meter-target"></small></div>
           <div class="muted" id="meter-left"></div>
@@ -405,7 +416,9 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
           <div class="field"><label for="st-rentDay">家賃引落日</label><input class="input sm" id="st-rentDay" inputmode="numeric"></div>
           <div class="field"><label for="st-cardDay">楽天カード引落日</label><input class="input sm" id="st-cardDay" inputmode="numeric"></div>
           <div class="field"><label for="st-cardTarget">楽天カード 月間目標（円）</label><input class="input sm" id="st-cardTarget" inputmode="numeric"></div>
+          <div class="field"><label for="st-living">生活費 月予算（円）</label><input class="input sm" id="st-living" inputmode="numeric"></div>
         </div>
+        <div class="muted">生活費 ＝ カードの今月利用額 ＋ 記録したカード利用 − 引落済みサブスク ＋ 現金・口座直接の記録。サブスクは含めない。</div>
         <div class="section-title" style="margin-top:6px"><span>サブスク（楽天カード払い）</span><span class="sub" id="subs-total"></span></div>
         <div class="sub-head"><span>名前</span><span>金額</span><span>日</span><span></span></div>
         <div class="subs" id="subs"></div>
@@ -496,7 +509,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   };
   const CARD_LIKE = (m) => m === 'card' || m === 'charge';
 
-  const EMPTY_SETTINGS = { salary: 0, salaryDay: 25, rent: 0, rentDay: 26, cardDay: 27, cardTarget: 0, subs: [] };
+  const EMPTY_SETTINGS = { salary: 0, salaryDay: 25, rent: 0, rentDay: 26, cardDay: 27, cardTarget: 0, livingBudget: 70000, subs: [] };
   const EMPTY_STATE = { balance: 0, cardFixed: 0, cardCurrent: 0, reserve: 0, pay: 0, extras: [], spends: [], overrides: {}, asOf: '', updatedAt: '' };
   let settings = { ...EMPTY_SETTINGS };
   let state = { ...EMPTY_STATE };
@@ -570,7 +583,22 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const start = num(state.balance) - bankPendTotal;
     let run = start, minRun = run, minEv = null;
     const timeline = events.map((e) => { run += e.amt; if (run < minRun) { minRun = run; minEv = e; } return { ...e, after: run }; });
-    return { d, ym, salaryPaid, rentPaid, lines, available, cardMonth, subsPendingTotal, cardPendTotal, bankPendTotal, cardPend, bankPend, extrasTotal, start, timeline, endBalance: run, minRun, minEv };
+
+    // 生活費のペース（暦月ベース。サブスクは除く）
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const daysLeft = daysInMonth - d + 1;
+    const subsCharged = (settings.subs || []).filter((s) => (num(s.day) || 1) <= d).reduce((a, s) => a + num(s.amount), 0);
+    const monthLog = (hist[ym] && hist[ym].spends) ? hist[ym].spends : [];
+    const cashUsed = monthLog.filter((s) => s.method === 'cash').reduce((a, s) => a + num(s.amount), 0);
+    const bankUsed = monthLog.filter((s) => s.method === 'bank').reduce((a, s) => a + num(s.amount), 0);
+    const cardLiving = Math.max(0, num(state.cardCurrent) + cardPendTotal - subsCharged);
+    const livingUsed = cardLiving + cashUsed + bankUsed;
+    const livingBudget = num(settings.livingBudget);
+    const livingLeft = livingBudget - livingUsed;
+    const perDay = daysLeft > 0 ? Math.floor(Math.max(0, livingLeft) / daysLeft) : 0;
+    const pace = { daysInMonth, daysLeft, livingBudget, livingUsed, livingLeft, perDay, cardLiving, cashUsed, bankUsed, elapsed: d / daysInMonth };
+
+    return { d, ym, salaryPaid, rentPaid, lines, available, cardMonth, subsPendingTotal, cardPendTotal, bankPendTotal, cardPend, bankPend, extrasTotal, start, timeline, endBalance: run, minRun, minEv, pace };
   }
 
   // ---------- render ----------
@@ -637,6 +665,22 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       ev.innerHTML = `<span class="d">${mm}/${e.day}</span><span>${e.name}</span><span class="a ${e.amt < 0 ? 'minus' : 'plus'}">${e.amt < 0 ? '−' : '+'}${yen(Math.abs(e.amt))}</span><span class="b ${e.after < 0 ? 'neg' : ''}">${yen(e.after)}</span>`;
       tl.appendChild(ev);
     }
+
+    // pace
+    const p = c.pace;
+    $('pace-sub').textContent = `あと${p.daysLeft}日（${mm}月${p.daysInMonth}日まで）`;
+    $('pace-perday').textContent = p.livingBudget ? yen(p.perDay) : '—';
+    $('pace-perday').parentElement.classList.toggle('over', p.livingBudget > 0 && p.livingLeft < 0);
+    $('pace-left').textContent = p.livingBudget ? (p.livingLeft >= 0 ? `残り ${yen(p.livingLeft)} ／ ${yen(p.livingBudget)}` : `${yen(-p.livingLeft)}円 超過 ／ ${yen(p.livingBudget)}`) : '設定で生活費の予算を';
+    const pr = p.livingBudget ? p.livingUsed / p.livingBudget : 0;
+    const pf = $('pace-fill');
+    pf.style.width = Math.min(100, Math.max(0, pr * 100)).toFixed(1) + '%';
+    pf.classList.toggle('warn', pr > p.elapsed + 0.08 && pr < 1);
+    pf.classList.toggle('crit', pr >= 1);
+    $('pace-tick').style.left = (p.elapsed * 100).toFixed(1) + '%';
+    $('pace-meter').setAttribute('aria-valuemax', String(p.livingBudget || 0));
+    $('pace-meter').setAttribute('aria-valuenow', String(p.livingUsed));
+    $('pace-legend').textContent = `使った ${yen(p.livingUsed)}（カード ${yen(p.cardLiving)}・現金 ${yen(p.cashUsed)}・口座 ${yen(p.bankUsed)}）｜ 目印は今日の理想位置`;
 
     // meter
     const target = num(settings.cardTarget);
@@ -733,6 +777,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     $('st-rentDay').value = settings.rentDay || '';
     $('st-cardDay').value = settings.cardDay || '';
     $('st-cardTarget').value = settings.cardTarget ? yen(settings.cardTarget) : '';
+    $('st-living').value = settings.livingBudget ? yen(settings.livingBudget) : '';
     renderSubs();
   }
   function renderSubs() {
@@ -912,7 +957,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     $('ex-name').value = ''; $('ex-amount').value = '';
     try { saveState(); render(); } catch (e) { showErr(e); }
   });
-  ['st-salary', 'st-salaryDay', 'st-rent', 'st-rentDay', 'st-cardDay', 'st-cardTarget'].forEach((id) => $(id).addEventListener('input', () => { settingsDirty = true; }));
+  ['st-salary', 'st-salaryDay', 'st-rent', 'st-rentDay', 'st-cardDay', 'st-cardTarget', 'st-living'].forEach((id) => $(id).addEventListener('input', () => { settingsDirty = true; }));
   $('sub-add').addEventListener('click', () => { settingsDirty = true; settings.subs = settings.subs || []; settings.subs.push({ id: uid(), name: '', amount: 0, day: 1 }); renderSubs(); });
   $('save-settings').addEventListener('click', () => {
     try {
@@ -922,6 +967,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       settings.rentDay = Math.min(31, Math.max(1, num($('st-rentDay').value) || 26));
       settings.cardDay = Math.min(31, Math.max(1, num($('st-cardDay').value) || 27));
       settings.cardTarget = num($('st-cardTarget').value);
+      settings.livingBudget = num($('st-living').value);
       settings.subs = (settings.subs || []).filter((s) => s.name || s.amount).map((s) => ({ id: s.id || uid(), name: s.name || '', amount: num(s.amount), day: Math.min(31, Math.max(1, num(s.day) || 1)) }));
       settingsDirty = false; saveSettings(); render(); showToast('toast4', '設定を保存しました');
     } catch (e) { showToast('toast4', '保存できませんでした', true); console.error(e); }
