@@ -86,8 +86,8 @@ body {
 .hdr .date { font-size: 13px; color: var(--text-2); }
 .hdr .status { font-size: 11px; color: var(--text-3); display: flex; align-items: center; gap: 5px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); display: inline-block; }
-.main { padding: 4px 16px 16px; }
-.tab { display: flex; flex-direction: column; gap: 10px; }
+.main { padding: 2px 16px 8px; }
+.tab { display: flex; flex-direction: column; gap: 7px; }
 
 .nav {
   background: var(--surface); border-top: 1px solid var(--line);
@@ -122,9 +122,14 @@ body {
 .section-title { font-size: 13px; font-weight: 600; color: var(--text-2); display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .section-title > span:first-child { white-space: nowrap; }
 .section-title .sub { font-weight: 400; color: var(--text-3); font-size: 12px; text-align: right; }
-.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 10px 13px; display: flex; flex-direction: column; gap: 6px; }
+.todo .item { grid-template-columns: 1fr auto; padding: 4px 0; }
+.todo .item .nm { font-size: 13px; line-height: 1.35; }
+.todo .item.done .nm { color: var(--text-3); text-decoration: line-through; }
+.todo .act { display: flex; gap: 6px; align-items: center; }
+.btn.xs { font-size: 12px; padding: 5px 9px; border-radius: 8px; }
 .card.hero { box-shadow: var(--shadow); border-color: transparent; gap: 4px; padding: 14px 16px 12px; }
-.hero-num { font-size: 46px; font-weight: 700; line-height: 1.05; letter-spacing: -.01em; display: flex; align-items: baseline; gap: 6px; }
+.hero-num { font-size: 44px; font-weight: 700; line-height: 1.05; letter-spacing: -.01em; display: flex; align-items: baseline; gap: 6px; }
 .hero-num .yen { font-size: 20px; font-weight: 500; color: var(--text-2); }
 .hero-num.neg { color: var(--crit-ink); }
 .hero-num.pos { color: var(--good-ink); }
@@ -178,13 +183,13 @@ button.chip:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px
 .timeline .ev .b.neg { color: var(--crit-ink); font-weight: 600; }
 
 .meter-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
-.meter-head .big { font-size: 21px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.meter-head .big { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; line-height: 1.2; }
 .meter-head .big small { font-size: 12px; color: var(--text-3); font-weight: 400; margin-left: 4px; }
 .meter { position: relative; height: 12px; border-radius: 6px; background: var(--meter-track); overflow: hidden; }
 .meter .fill { position: absolute; inset: 0 auto 0 0; border-radius: 6px; background: var(--accent); transition: width .3s ease; }
 .meter .fill.warn { background: var(--warn); }
 .meter .fill.crit { background: var(--crit); }
-.meter-legend { font-size: 12px; color: var(--text-3); font-variant-numeric: tabular-nums; }
+.meter-legend { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
 .meter .tick { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--text-2); border-radius: 1px; opacity: .8; }
 .divider { border-top: 1px dashed var(--line); margin: 2px 0; }
 .big.over { color: var(--crit-ink); }
@@ -297,10 +302,12 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       <section class="card hero" aria-labelledby="hero-label">
         <div class="eyebrow" id="hero-label">使えるお金</div>
         <div class="hero-num" id="hero"><span class="yen">¥</span><span id="hero-val">—</span></div>
-        <div class="hero-caption">今月の引落をすべて払い、カードで使った分も引いた残り</div>
         <div class="hero-foot">
-          <button type="button" class="linkbtn" id="ledger-toggle" aria-expanded="false" aria-controls="ledger">内訳を見る</button>
-          <span class="toast" id="toast-home" aria-live="polite"></span>
+          <span class="hero-caption">今月の引落と、使った分を全部引いた残り</span>
+          <button type="button" class="linkbtn" id="ledger-toggle" aria-expanded="false" aria-controls="ledger" style="white-space:nowrap">内訳を見る</button>
+        </div>
+        <div class="hero-foot" id="hero-toast-row" hidden style="justify-content:flex-end">
+          <span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="toast" id="toast-home" aria-live="polite"></span><button type="button" class="linkbtn" id="undo" hidden>取り消す</button></span>
         </div>
         <div class="ledger" id="ledger" hidden></div>
         <div id="hero-hints" style="display:flex;flex-direction:column;gap:6px"></div>
@@ -318,15 +325,14 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
           <div class="muted" id="pace-left"></div>
         </div>
         <div class="meter" role="meter" aria-label="今月の生活費" aria-valuemin="0" id="pace-meter"><div class="fill" id="pace-fill" style="width:0%"></div><div class="tick" id="pace-tick" style="left:0%" title="今日の理想位置"></div></div>
-        <div class="meter-legend" id="pace-legend"></div>
-        <div class="divider"></div>
-        <div class="section-title"><span>楽天カード</span><span class="sub" id="meter-sub"></span></div>
-        <div class="meter-head">
-          <div class="big"><span id="meter-val">—</span><small id="meter-target"></small></div>
-          <div class="muted" id="meter-left"></div>
-        </div>
+        <div class="meter-legend" id="pace-proj"></div>
+        <div class="section-title" style="margin-top:4px"><span>楽天カード <b id="meter-val" style="font-variant-numeric:tabular-nums"></b><small id="meter-target" class="muted"></small></span><span class="sub" id="meter-left"></span></div>
         <div class="meter" role="meter" aria-label="今月の楽天カード利用額" aria-valuemin="0" id="meter"><div class="fill" id="meter-fill" style="width:0%"></div></div>
-        <div class="meter-legend" id="meter-legend"></div>
+        <div class="meter-legend" id="meter-sub"></div>
+      </section>
+      <section class="card todo">
+        <div class="section-title"><span>今月のやること</span><span class="sub"><span id="todo-sub"></span> <button type="button" class="linkbtn" id="todo-add-toggle" style="font-size:12px;padding:0 0 0 8px">＋追加</button></span></div>
+        <div class="list" id="todo-list"></div>
       </section>
     </section>
 
@@ -417,7 +423,9 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
           <div class="field"><label for="st-cardDay">楽天カード引落日</label><input class="input sm" id="st-cardDay" inputmode="numeric"></div>
           <div class="field"><label for="st-cardTarget">楽天カード 月間目標（円）</label><input class="input sm" id="st-cardTarget" inputmode="numeric"></div>
           <div class="field"><label for="st-living">生活費 月予算（円）</label><input class="input sm" id="st-living" inputmode="numeric"></div>
+          <div class="field"><label for="st-reserve">毎月の積立（円）</label><input class="input sm" id="st-reserve" inputmode="numeric"></div>
         </div>
+        <div class="muted">積立は給料日以降「今月のやること」に出て、「足す」で触らないお金に加算されます。</div>
         <div class="muted">生活費 ＝ カードの今月利用額 ＋ 記録したカード利用 − 引落済みサブスク ＋ 現金・口座直接の記録。サブスクは含めない。</div>
         <div class="section-title" style="margin-top:6px"><span>サブスク（楽天カード払い）</span><span class="sub" id="subs-total"></span></div>
         <div class="sub-head"><span>名前</span><span>金額</span><span>日</span><span></span></div>
@@ -474,6 +482,15 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   </div>
 </div>
 
+<!-- ===== TODO SHEET (top-anchored so the keyboard never covers it) ===== -->
+<div class="sheet-backdrop" id="todo-sheet" hidden>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="todo-sheet-title">
+    <div class="sheet-head"><span class="t" id="todo-sheet-title">やることを追加</span><button type="button" class="x" id="todo-sheet-x" aria-label="閉じる">×</button></div>
+    <input class="input sm txt" id="todo-text" placeholder="例：Wi-Fi未払いの額を確認" autocomplete="off" enterkeyhint="done">
+    <button type="button" class="btn wide" id="todo-add-btn">追加</button>
+  </div>
+</div>
+
 <!-- ===== NUMBER PAD ===== -->
 <div class="pad" id="pad" hidden role="group" aria-label="数字キー">
   <div class="pad-grid">
@@ -509,8 +526,8 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   };
   const CARD_LIKE = (m) => m === 'card' || m === 'charge';
 
-  const EMPTY_SETTINGS = { salary: 0, salaryDay: 25, rent: 0, rentDay: 26, cardDay: 27, cardTarget: 0, livingBudget: 70000, subs: [] };
-  const EMPTY_STATE = { balance: 0, cardFixed: 0, cardCurrent: 0, reserve: 0, pay: 0, extras: [], spends: [], overrides: {}, asOf: '', updatedAt: '' };
+  const EMPTY_SETTINGS = { salary: 0, salaryDay: 25, rent: 0, rentDay: 26, cardDay: 27, cardTarget: 0, livingBudget: 70000, reserveMonthly: 15000, subs: [] };
+  const EMPTY_STATE = { balance: 0, cardFixed: 0, cardCurrent: 0, reserve: 0, pay: 0, extras: [], spends: [], overrides: {}, todos: { done: {}, custom: [] }, asOf: '', updatedAt: '' };
   let settings = { ...EMPTY_SETTINGS };
   let state = { ...EMPTY_STATE };
   let hist = {};
@@ -526,6 +543,11 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     state = { ...EMPTY_STATE, ...(LS.get('state') || {}) };
     hist = LS.get('history') || {};
     (state.spends || []).forEach((s) => { if (!s.method) s.method = 'card'; });
+    if (!state.todos || typeof state.todos !== 'object') state.todos = { done: {}, custom: [] };
+    if (!state.todos.done) state.todos.done = {};
+    if (!Array.isArray(state.todos.custom)) state.todos.custom = [];
+    const nowYm = ymOf(new Date());
+    state.todos.custom = state.todos.custom.filter((t) => !(t.done && t.doneYm && t.doneYm < nowYm));
   }
   const SAVE_ERR = 'この端末に保存できません（プライベートブラウズ？）';
   function saveSettings() { settings.updatedAt = new Date().toISOString(); if (!LS.set('settings', settings)) throw new Error(SAVE_ERR); }
@@ -596,7 +618,10 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const livingBudget = num(settings.livingBudget);
     const livingLeft = livingBudget - livingUsed;
     const perDay = daysLeft > 0 ? Math.floor(Math.max(0, livingLeft) / daysLeft) : 0;
-    const pace = { daysInMonth, daysLeft, livingBudget, livingUsed, livingLeft, perDay, cardLiving, cashUsed, bankUsed, elapsed: d / daysInMonth };
+    const projLiving = Math.round(livingUsed * daysInMonth / d);
+    const subsRemaining = (settings.subs || []).filter((s) => (num(s.day) || 1) > d).reduce((a, s) => a + num(s.amount), 0);
+    const projCard = Math.round(num(state.cardCurrent) + cardPendTotal + subsRemaining + (cardLiving / d) * (daysInMonth - d));
+    const pace = { daysInMonth, daysLeft, livingBudget, livingUsed, livingLeft, perDay, cardLiving, cashUsed, bankUsed, elapsed: d / daysInMonth, projLiving, projCard };
 
     return { d, ym, salaryPaid, rentPaid, lines, available, cardMonth, subsPendingTotal, cardPendTotal, bankPendTotal, cardPend, bankPend, extrasTotal, start, timeline, endBalance: run, minRun, minEv, pace };
   }
@@ -652,8 +677,8 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const v = $('check-verdict'); v.innerHTML = '';
     const verdict = document.createElement('div');
     if (!c.timeline.length) { verdict.className = 'hint plain'; verdict.textContent = '今月これから口座に入る・出るものはありません。'; }
-    else if (c.minRun < 0) { verdict.className = 'hint crit'; verdict.textContent = `${mm}/${c.minEv.day} の${c.minEv.name}で ${yen(-c.minRun)}円 足りません。金券の現金化や立替の回収を先に、それでも不足する分だけ固定回数の分割に。`; }
-    else { verdict.className = 'hint good'; verdict.textContent = `今月の引落はすべて払えます。引落後の口座残高は ${yen(c.endBalance)}円 の見込み。`; }
+    else if (c.minRun < 0) { verdict.className = 'hint crit'; verdict.textContent = `${mm}/${c.minEv.day} の${c.minEv.name}で ${yen(-c.minRun)}円 不足。先に金券・立替を回収し、残りだけ分割に。`; }
+    else { verdict.className = 'hint good'; verdict.textContent = `今月の引落は全て払えます。引落後の残高 ${yen(c.endBalance)}円 の見込み。`; }
     v.appendChild(verdict);
     $('check-pay').innerHTML = `楽天ペイ残高 <b>${yen(num(state.pay))}</b>`;
     const tl = $('check-tl'); tl.innerHTML = '';
@@ -671,7 +696,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     $('pace-sub').textContent = `あと${p.daysLeft}日（${mm}月${p.daysInMonth}日まで）`;
     $('pace-perday').textContent = p.livingBudget ? yen(p.perDay) : '—';
     $('pace-perday').parentElement.classList.toggle('over', p.livingBudget > 0 && p.livingLeft < 0);
-    $('pace-left').textContent = p.livingBudget ? (p.livingLeft >= 0 ? `残り ${yen(p.livingLeft)} ／ ${yen(p.livingBudget)}` : `${yen(-p.livingLeft)}円 超過 ／ ${yen(p.livingBudget)}`) : '設定で生活費の予算を';
+    $('pace-left').textContent = p.livingBudget ? (p.livingLeft >= 0 ? `使った ${yen(p.livingUsed)}・残り ${yen(p.livingLeft)} ／ ${yen(p.livingBudget)}` : `使った ${yen(p.livingUsed)}・${yen(-p.livingLeft)} 超過 ／ ${yen(p.livingBudget)}`) : '設定で生活費の予算を';
     const pr = p.livingBudget ? p.livingUsed / p.livingBudget : 0;
     const pf = $('pace-fill');
     pf.style.width = Math.min(100, Math.max(0, pr * 100)).toFixed(1) + '%';
@@ -680,13 +705,18 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     $('pace-tick').style.left = (p.elapsed * 100).toFixed(1) + '%';
     $('pace-meter').setAttribute('aria-valuemax', String(p.livingBudget || 0));
     $('pace-meter').setAttribute('aria-valuenow', String(p.livingUsed));
-    $('pace-legend').textContent = `使った ${yen(p.livingUsed)}（カード ${yen(p.cardLiving)}・現金 ${yen(p.cashUsed)}・口座 ${yen(p.bankUsed)}）｜ 目印は今日の理想位置`;
+    const signed = (v) => (v >= 0 ? '+' : '−') + yen(Math.abs(v));
+    const target0 = num(settings.cardTarget);
+    $('pace-proj').textContent = `このペースなら月末：生活費 ${yen(p.projLiving)}${p.livingBudget ? `（予算比 ${signed(p.projLiving - p.livingBudget)}）` : ''}・楽天 ${yen(p.projCard)}${target0 ? `（目標比 ${signed(p.projCard - target0)}）` : ''}`;
+
+    // todos
+    renderTodos(c, now);
 
     // meter
     const target = num(settings.cardTarget);
     $('meter-val').textContent = yen(c.cardMonth);
-    $('meter-target').textContent = target ? `/ ${yen(target)}` : '';
-    $('meter-sub').textContent = `${mm}月の利用分`;
+    $('meter-target').textContent = target ? ` / ${yen(target)}` : '';
+    $('meter-sub').textContent = `カードアプリ ${yen(num(state.cardCurrent))} ＋ 記録 ${yen(c.cardPendTotal)} ＋ サブスク予定 ${yen(c.subsPendingTotal)}`;
     const ratio = target ? c.cardMonth / target : 0;
     const fill = $('meter-fill');
     fill.style.width = Math.min(100, Math.max(0, ratio * 100)).toFixed(1) + '%';
@@ -696,7 +726,6 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     $('meter').setAttribute('aria-valuenow', String(c.cardMonth));
     const left = target - c.cardMonth;
     $('meter-left').textContent = target ? (left >= 0 ? `残り ${yen(left)}円` : `${yen(-left)}円 超過`) : '設定で目標を入れてください';
-    $('meter-legend').textContent = `カードアプリ ${yen(num(state.cardCurrent))} ＋ 記録 ${yen(c.cardPendTotal)} ＋ サブスク予定 ${yen(c.subsPendingTotal)}`;
 
     // input tab
     if (!formDirty) {
@@ -778,6 +807,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     $('st-cardDay').value = settings.cardDay || '';
     $('st-cardTarget').value = settings.cardTarget ? yen(settings.cardTarget) : '';
     $('st-living').value = settings.livingBudget ? yen(settings.livingBudget) : '';
+    $('st-reserve').value = settings.reserveMonthly ? yen(settings.reserveMonthly) : '';
     renderSubs();
   }
   function renderSubs() {
@@ -796,6 +826,74 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     updateSubsTotal();
   }
   function updateSubsTotal() { const t = (settings.subs || []).reduce((a, s) => a + num(s.amount), 0); $('subs-total').textContent = `合計 ${yen(t)}円/月`; }
+
+  // ---------- 今月のやること ----------
+  function todoDone(ym, key) { return !!((state.todos.done[ym] || {})[key]); }
+  function markTodo(key, done) { const ym = ymOf(new Date()); state.todos.done[ym] = { ...(state.todos.done[ym] || {}), [key]: done }; }
+  function buildTodos(c, now) {
+    const items = [];
+    const daysSince = state.asOf ? Math.floor((now - new Date(state.asOf + 'T00:00:00')) / 86400000) : 99;
+    if (daysSince >= 7) items.push({ key: 'update', text: state.asOf ? `カードアプリの数字を更新（${daysSince}日前のまま）` : 'カードアプリの数字を入れる', action: 'go-input', label: '入力へ' });
+    if (num(settings.reserveMonthly) > 0 && c.d >= settings.salaryDay && !todoDone(c.ym, 'reserve')) items.push({ key: 'reserve', text: `触らないお金に ${yen(settings.reserveMonthly)} を足す（給料日）`, action: 'add-reserve', label: '足す', skip: true });
+    if (c.d >= settings.cardDay && num(state.cardFixed) > 0) items.push({ key: 'zero', text: `カード引落が済んだら次回請求額を 0 に（今 ${yen(state.cardFixed)}）`, action: 'zero-fixed', label: '0にする' });
+    const old = (state.spends || []).filter((s) => CARD_LIKE(s.method) && (now - new Date(s.date + 'T00:00:00')) / 86400000 >= 3);
+    if (old.length) items.push({ key: 'pending', text: `記録 ${old.length}件がカードアプリに載ったか確認`, action: 'go-input', label: '入力へ' });
+    const open = (state.extras || []).filter((e) => !e.done);
+    if (open.length) items.push({ key: 'extras', text: `臨時支出を確定・支払い：${open.map((e) => e.name).join('・')}`, action: 'go-input', label: '入力へ' });
+    for (const t of state.todos.custom) items.push({ key: 'c:' + t.id, text: t.text, custom: t });
+    return items;
+  }
+  function renderTodos(c, now) {
+    const items = buildTodos(c, now);
+    const box = $('todo-list'); box.innerHTML = '';
+    const openCount = items.filter((i) => !(i.custom && i.custom.done)).length;
+    $('todo-sub').textContent = openCount ? `あと${openCount}件` : '今日はなし';
+    if (!items.length) { const p = document.createElement('div'); p.className = 'muted'; p.textContent = '数字は最新で、やることは出ていません。'; box.appendChild(p); return; }
+    for (const it of items) {
+      const row = document.createElement('div'); row.className = 'item noc' + (it.custom && it.custom.done ? ' done' : '');
+      const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = it.text;
+      const act = document.createElement('div'); act.className = 'act';
+      if (it.custom) {
+        const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'cb'; cb.checked = !!it.custom.done; cb.setAttribute('aria-label', it.text + ' 済み');
+        cb.addEventListener('change', () => { it.custom.done = cb.checked; it.custom.doneYm = cb.checked ? c.ym : ''; try { saveState(); render(); } catch (e) { showErr(e); } });
+        const x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', '削除');
+        x.addEventListener('click', () => { state.todos.custom = state.todos.custom.filter((q) => q.id !== it.custom.id); try { saveState(); render(); } catch (e) { showErr(e); } });
+        act.append(cb, x);
+      } else {
+        const b = document.createElement('button'); b.type = 'button'; b.className = 'btn xs' + (it.action === 'go-input' ? ' ghost' : ''); b.textContent = it.label;
+        b.addEventListener('click', () => todoAction(it));
+        act.appendChild(b);
+        if (it.skip) { const s = document.createElement('button'); s.type = 'button'; s.className = 'chip'; s.textContent = '済'; s.title = '手動で済ませた'; s.addEventListener('click', () => { markTodo(it.key, true); try { saveState(); render(); } catch (e) { showErr(e); } }); act.appendChild(s); }
+      }
+      row.append(nm, act); box.appendChild(row);
+    }
+  }
+  function todoAction(it) {
+    try {
+      if (it.action === 'go-input') { showTab('input'); return; }
+      if (it.action === 'add-reserve') {
+        state.reserve = num(state.reserve) + num(settings.reserveMonthly); markTodo('reserve', true); saveState(); render();
+        showToast('toast-home', `触らないお金 ${yen(state.reserve)}円に`); return;
+      }
+      if (it.action === 'zero-fixed') {
+        if (!confirm(`次回請求額 ${yen(state.cardFixed)}円 を 0 にします。口座から引き落とされたことを確認しましたか？`)) return;
+        state.cardFixed = 0; formDirty = false; saveState(); render(); showToast('toast-home', '次回請求額を 0 にしました'); return;
+      }
+    } catch (e) { showErr(e); }
+  }
+  function openTodoSheet() { $('todo-sheet').hidden = false; $('todo-text').value = ''; $('todo-text').focus(); }
+  function closeTodoSheet() { $('todo-sheet').hidden = true; }
+  function addTodo() {
+    const t = $('todo-text').value.trim(); if (!t) { $('todo-text').focus(); return; }
+    state.todos.custom.push({ id: uid(), text: t, done: false, doneYm: '' });
+    closeTodoSheet();
+    try { saveState(); render(); showToast('toast-home', '追加しました'); } catch (e) { showErr(e); }
+  }
+  $('todo-add-toggle').addEventListener('click', openTodoSheet);
+  $('todo-sheet-x').addEventListener('click', closeTodoSheet);
+  $('todo-sheet').addEventListener('click', (ev) => { if (ev.target === $('todo-sheet')) closeTodoSheet(); });
+  $('todo-add-btn').addEventListener('click', addTodo);
+  $('todo-text').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); addTodo(); } });
 
   // ---------- tabs & toggles ----------
   function showTab(name) {
@@ -888,11 +986,13 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const memo = $('sp-memo').value.trim();
     const date = ymd(new Date());
     const entry = { date, amount, method: m, cat: mode === 'charge' ? '' : cat, memo };
-    if (CARD_LIKE(m) || m === 'bank') { state.spends = state.spends || []; state.spends.push({ id: uid(), ...entry }); }
+    let spendId = null;
+    if (CARD_LIKE(m) || m === 'bank') { spendId = uid(); state.spends = state.spends || []; state.spends.push({ id: spendId, ...entry }); }
     if (m === 'pay') state.pay = num(state.pay) - amount;
     if (m === 'charge') state.pay = num(state.pay) + amount;
     monthDoc(date.slice(0, 7)).spends.push(entry);
     try { saveState(); saveHist(); } catch (e) { $('sp-err').textContent = e.message; return; }
+    lastRecord = { ym: date.slice(0, 7), entry, spendId }; showUndo();
     closeSheet(); render(); showTab('home');
     const c = compute(new Date());
     const label = METHODS[m].label;
@@ -901,6 +1001,24 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     else if (m === 'cash') showToast('toast-home', `現金 −${yen(amount)}円 を記録`);
     else showToast('toast-home', `${label} −${yen(amount)}円。使えるお金 ${yen(c.available)}円`);
   }
+  // 直前の記録の取り消し
+  let lastRecord = null, undoTimer = null;
+  function showUndo() { $('undo').hidden = false; clearTimeout(undoTimer); undoTimer = setTimeout(() => { $('undo').hidden = true; lastRecord = null; }, 8000); }
+  $('undo').addEventListener('click', () => {
+    if (!lastRecord) return;
+    const { ym, entry, spendId } = lastRecord;
+    if (spendId) state.spends = (state.spends || []).filter((s) => s.id !== spendId);
+    if (entry.method === 'pay') state.pay = num(state.pay) + entry.amount;
+    if (entry.method === 'charge') state.pay = num(state.pay) - entry.amount;
+    const doc = hist[ym];
+    if (doc && doc.spends) {
+      let i = doc.spends.lastIndexOf(entry);
+      if (i < 0) { const sig = (s) => s.date + '|' + s.amount + '|' + s.method + '|' + (s.memo || ''); i = doc.spends.map(sig).lastIndexOf(sig(entry)); }
+      if (i >= 0) doc.spends.splice(i, 1);
+    }
+    lastRecord = null; $('undo').hidden = true; clearTimeout(undoTimer);
+    try { saveState(); saveHist(); render(); showToast('toast-home', '取り消しました'); } catch (e) { showErr(e); }
+  });
   $('sp-save').addEventListener('click', record);
   $('sp-amount').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); record(); } });
   $('sp-memo').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); record(); } });
@@ -911,7 +1029,11 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   });
 
   // ---------- actions ----------
-  function showToast(id, msg, err) { const t = $(id); t.textContent = msg; t.classList.toggle('err', !!err); setTimeout(() => { if (t.textContent === msg) t.textContent = ''; }, 4500); }
+  function showToast(id, msg, err) {
+    const t = $(id); t.textContent = msg; t.classList.toggle('err', !!err);
+    const row = id === 'toast-home' ? $('hero-toast-row') : null; if (row) row.hidden = false;
+    setTimeout(() => { if (t.textContent === msg) { t.textContent = ''; if (row && $('undo').hidden) row.hidden = true; } }, 4500);
+  }
   function showErr(e) { console.error(e); showToast('toast', '保存できませんでした：' + (e && e.message ? e.message : e), true); }
   function toggleOverride(key, paid) {
     const ym = ymOf(new Date());
@@ -957,7 +1079,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     $('ex-name').value = ''; $('ex-amount').value = '';
     try { saveState(); render(); } catch (e) { showErr(e); }
   });
-  ['st-salary', 'st-salaryDay', 'st-rent', 'st-rentDay', 'st-cardDay', 'st-cardTarget', 'st-living'].forEach((id) => $(id).addEventListener('input', () => { settingsDirty = true; }));
+  ['st-salary', 'st-salaryDay', 'st-rent', 'st-rentDay', 'st-cardDay', 'st-cardTarget', 'st-living', 'st-reserve'].forEach((id) => $(id).addEventListener('input', () => { settingsDirty = true; }));
   $('sub-add').addEventListener('click', () => { settingsDirty = true; settings.subs = settings.subs || []; settings.subs.push({ id: uid(), name: '', amount: 0, day: 1 }); renderSubs(); });
   $('save-settings').addEventListener('click', () => {
     try {
@@ -968,6 +1090,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       settings.cardDay = Math.min(31, Math.max(1, num($('st-cardDay').value) || 27));
       settings.cardTarget = num($('st-cardTarget').value);
       settings.livingBudget = num($('st-living').value);
+      settings.reserveMonthly = num($('st-reserve').value);
       settings.subs = (settings.subs || []).filter((s) => s.name || s.amount).map((s) => ({ id: s.id || uid(), name: s.name || '', amount: num(s.amount), day: Math.min(31, Math.max(1, num(s.day) || 1)) }));
       settingsDirty = false; saveSettings(); render(); showToast('toast4', '設定を保存しました');
     } catch (e) { showToast('toast4', '保存できませんでした', true); console.error(e); }
