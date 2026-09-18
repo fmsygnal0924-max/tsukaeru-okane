@@ -1,7 +1,7 @@
 {
-  "name": "使えるお金",
-  "short_name": "使えるお金",
-  "description": "口座残高と楽天カードの数字から、本当に使えるお金を出す",
+  "name": "Yohaku",
+  "short_name": "Yohaku",
+  "description": "口座残高と楽天カードの数字から、本当に使えるお金（余白）を出す",
   "lang": "ja",
   "start_url": "./",
   "scope": "./",
