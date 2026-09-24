@@ -1251,10 +1251,18 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     LS.set('sync', { url, key }); $('sync-connect').disabled = true; showToast('toast8', '接続しています…');
     try {
       let j = await apiGetAll();
-      const serverEmpty = isEmptyServer(j);
-      if (serverEmpty) j = await apiPost('bootstrap', { settings, state, log: flattenLog(), entries: flattenEntries() });
+      // 設定がまだ無い＝初めての接続。スプレッドシート側にメール由来の記録だけがある場合は、この端末の数字と合流させる
+      const serverEmpty = !j.settings || !Object.keys(j.settings).length;
+      if (serverEmpty) {
+        const srv = j.state || {};
+        const merged = { ...state };
+        const ids = new Set((state.spends || []).map((s) => s.id));
+        merged.spends = [...(state.spends || []), ...((srv.spends || []).filter((s) => !ids.has(s.id)))];
+        merged.pay = num(state.pay) + num(srv.pay);
+        j = await apiPost('bootstrap', { settings, state: merged, log: flattenLog(), entries: flattenEntries() });
+      }
       applyServer(j); lastSyncAt = hhmm(); setSyncUI('synced'); renderSyncUI();
-      showToast('toast9', serverEmpty ? '接続しました。この端末のデータを送りました' : '接続しました。スプレッドシートの内容を読み込みました');
+      showToast('toast9', serverEmpty ? '接続しました。この端末の設定と数字を送り、メールの記録と合流させました' : '接続しました。スプレッドシートの内容を読み込みました');
     } catch (e) { LS.del('sync'); setSyncUI('local'); renderSyncUI(); showToast('toast8', '接続できません：' + friendlyErr(e), true); }
     finally { $('sync-connect').disabled = false; }
   });
