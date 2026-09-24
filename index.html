@@ -154,6 +154,12 @@ body {
 .ledger .amt.plus { color: var(--good-ink); }
 .ledger .amt.muted { color: var(--text-3); text-decoration: line-through; }
 .ledger .row.skip .name { color: var(--text-3); }
+.ledger .grp { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 600; color: var(--text-2); padding: 9px 0 2px; font-variant-numeric: tabular-nums; }
+.ledger .grp .plus { color: var(--good-ink); } .ledger .grp .minus { color: var(--crit-ink); }
+.ledger .row.sub { border-top: 0; padding: 3px 0 3px 10px; }
+.ledger .row.sub .name { font-size: 13px; }
+.ledger .row.sub .amt { font-size: 13px; color: var(--text-2); }
+.ledger .row.sub .amt.muted { color: var(--text-3); }
 
 .chip { font: inherit; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--text-2); background: var(--surface-2); cursor: pointer; user-select: none; line-height: 1.4; white-space: nowrap; }
 .chip.paid { background: var(--good-soft); color: var(--good-ink); border-color: transparent; }
@@ -306,7 +312,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         <div class="eyebrow" id="hero-label">使えるお金</div>
         <div class="hero-num" id="hero"><span class="yen">¥</span><span id="hero-val">—</span></div>
         <div class="hero-foot">
-          <span class="hero-caption">今月の引落と、使った分を全部引いた残り</span>
+          <span class="hero-caption">手元と給料から、これから出るお金と、もう使ったお金を引いた残り</span>
           <button type="button" class="linkbtn" id="ledger-toggle" aria-expanded="false" aria-controls="ledger" style="white-space:nowrap">内訳を見る</button>
         </div>
         <div class="hero-foot" id="hero-toast-row" hidden style="justify-content:flex-end">
@@ -661,8 +667,16 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     $('hero-val').textContent = yen(c.available);
 
     const lg = $('ledger'); lg.innerHTML = '';
-    for (const l of c.lines) {
-      const row = document.createElement('div'); row.className = 'row' + (l.skip ? ' skip' : '');
+    const GROUPS = [['in', '手元と、これから入るお金', +1], ['out', 'これから口座から出るお金', -1], ['used', 'もう使ったお金（次のカード請求など）', -1], ['keep', '取り分けておくお金', -1]];
+    const GROUP_OF = { balance: 'in', salary: 'in', fixed: 'out', rent: 'out', extras: 'out', bank: 'used', current: 'used', pend: 'used', subs: 'used', reserve: 'keep' };
+    const grouped = GROUPS.map(([g, title, sign]) => ({ g, title, sign, rows: c.lines.filter((l) => (GROUP_OF[l.key] || 'out') === g) })).filter((x) => x.rows.length);
+    for (const grp of grouped) {
+      const sub = grp.rows.reduce((a, l) => a + (l.skip ? 0 : l.amt), 0);
+      const h = document.createElement('div'); h.className = 'grp';
+      h.innerHTML = `<span>${grp.title}</span><span class="${grp.sign > 0 ? 'plus' : 'minus'}">${grp.sign > 0 ? '+' : '−'}${yen(sub)}</span>`;
+      lg.appendChild(h);
+      for (const l of grp.rows) {
+      const row = document.createElement('div'); row.className = 'row sub' + (l.skip ? ' skip' : '');
       const label = document.createElement('div'); label.className = 'label';
       const nm = document.createElement('span'); nm.className = 'name'; nm.textContent = l.name; label.appendChild(nm);
       if (l.toggle) {
@@ -676,9 +690,10 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       amt.className = 'amt ' + (l.skip ? 'muted' : (l.sign > 0 ? 'plus' : 'minus'));
       amt.textContent = (l.sign > 0 ? '+' : '−') + yen(l.amt);
       row.appendChild(label); row.appendChild(amt); lg.appendChild(row);
+      }
     }
     const tot = document.createElement('div'); tot.className = 'row total';
-    tot.innerHTML = `<div class="label"><span class="name">使えるお金</span></div><div class="amt ${c.available < 0 ? 'minus' : 'plus'}">${yen(c.available)}</div>`;
+    tot.innerHTML = `<div class="label"><span class="name">使えるお金 ＝ 入る − 出る − 使った − 取り分け</span></div><div class="amt ${c.available < 0 ? 'minus' : 'plus'}">${yen(c.available)}</div>`;
     lg.appendChild(tot);
 
     const hints = $('hero-hints'); hints.innerHTML = '';
