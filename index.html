@@ -351,31 +351,22 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     <!-- ===== INPUT ===== -->
     <section class="tab" data-tab="input" hidden>
       <section class="card">
-        <div class="section-title"><span>楽天カードアプリの数字を入れる</span><span class="sub" id="asof-sub"></span></div>
+        <div class="section-title"><span>数字を入れる</span><span class="sub" id="asof-sub"></span></div>
         <div class="fields">
           <div class="field">
-            <label for="in-balance"><span>口座残高</span><span class="tip">銀行アプリの今の残高</span></label>
+            <label for="in-balance"><span>口座残高</span><span class="tip">銀行アプリの今の残高（週1）</span></label>
             <input class="input" id="in-balance" inputmode="numeric" autocomplete="off" placeholder="0">
           </div>
           <div class="field">
-            <label for="in-fixed"><span>楽天カード 次回請求額（確定）</span><span class="tip">カードアプリの「お支払い金額」</span></label>
+            <label for="in-fixed"><span>楽天カード 次回請求額</span><span class="tip" id="fixed-note">月初に見込みが自動で入る</span></label>
             <input class="input" id="in-fixed" inputmode="numeric" autocomplete="off" placeholder="0">
-          </div>
-          <div class="field">
-            <label for="in-current"><span>楽天カード 今月の利用額</span><span class="tip">カードアプリの「ご利用金額」</span></label>
-            <input class="input" id="in-current" inputmode="numeric" autocomplete="off" placeholder="0">
           </div>
         </div>
         <div class="actions">
           <button class="btn" id="save">保存して更新</button>
           <span class="toast" id="toast" aria-live="polite"></span>
         </div>
-      </section>
-      <section class="card">
-        <div class="section-title"><span>まだカードアプリに載っていない記録</span><span class="sub" id="pend-sub"></span></div>
-        <div class="list" id="pending"></div>
-        <div class="actions"><button class="btn ghost sm" id="pending-clear">カードアプリに載ったので全部消す</button></div>
-        <div class="muted">「＋使った」で記録したカード利用とチャージ。使えるお金からは即引いてあります。上の「今月の利用額」に含まれた時点で消してください（保存時にも聞きます）。</div>
+        <div class="muted">カードの利用はメールと「＋使った」の記録から自動で集計します。次回請求額は月替わりに先月の記録合計が見込みとして入るので、月初にカードアプリの確定額に直すだけです。</div>
       </section>
       <section class="card">
         <div class="section-title"><span>臨時の確定支出</span><span class="sub">払ったらチェック</span></div>
@@ -415,7 +406,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         <div class="section-title"><span>数字の履歴</span><span class="sub">「保存して更新」のたびに1行</span></div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>日付</th><th>口座残高</th><th>次回請求</th><th>今月利用</th><th>使えるお金</th></tr></thead>
+            <thead><tr><th>日付</th><th>口座残高</th><th>次回請求</th><th>今月カード</th><th>使えるお金</th></tr></thead>
             <tbody id="hist-body"></tbody>
           </table>
         </div>
@@ -556,7 +547,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   let settings = { ...EMPTY_SETTINGS };
   let state = { ...EMPTY_STATE };
   let hist = {};
-  let formDirty = false, settingsDirty = false;
+  let formDirty = false, settingsDirty = false, fixedDirty = false;
 
   const LS = {
     get(k) { try { const v = localStorage.getItem('yohaku:' + k); if (v !== null) return JSON.parse(v); const old = localStorage.getItem('tsukaeru:' + k); return old ? JSON.parse(old) : null; } catch (e) { return null; } },
@@ -593,65 +584,99 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   }
 
   // ---------- calculation ----------
+  function matchesSub(r, s) {
+    const name = String(s.name || '').toLowerCase().trim(); if (!name) return false;
+    const txt = ((r.merchant || '') + ' ' + (r.memo || '')).toLowerCase();
+    if (txt.includes(name)) return true;
+    return r.cat === 'サブスク' && num(r.amount) === num(s.amount) && num(s.amount) > 0;
+  }
+  // 月替わり: 先月のカード利用合計を「次回請求（見込み）」にし、今月の利用は0から数える
+  function maybeRollover(now) {
+    const ym = ymOf(now);
+    if (!state.cycleYm) {
+      state.cycleYm = ym;
+      if (num(state.cardCurrent) > 0 && !state.cardCurrentAsOf) state.cardCurrentAsOf = state.asOf || (ym + '-01');
+      try { saveState(); } catch (e) {}
+      pushFields({ cycleYm: state.cycleYm, cardCurrentAsOf: state.cardCurrentAsOf || '' });
+      return;
+    }
+    if (state.cycleYm === ym) return;
+    const prevYm = state.cycleYm;
+    const prevLog = ((hist[prevYm] && hist[prevYm].spends) || []).filter((r) => CARD_LIKE(r.method));
+    const legacyDay = (num(state.cardCurrent) > 0 && state.cardCurrentAsOf && state.cardCurrentAsOf.slice(0, 7) === prevYm) ? Number(state.cardCurrentAsOf.slice(8, 10)) : 0;
+    const subs = settings.subs || [];
+    const unmatched = subs.filter((sub) => !prevLog.some((r) => matchesSub(r, sub)) && !(legacyDay && (num(sub.day) || 1) <= legacyDay));
+    const est = num(state.cardCurrent) + prevLog.reduce((a, r) => a + num(r.amount), 0) + unmatched.reduce((a, sub) => a + num(sub.amount), 0);
+    state.cardFixed = est; state.cardFixedSource = 'estimate';
+    state.cardCurrent = 0; state.cardCurrentAsOf = ''; state.cycleYm = ym;
+    try { saveState(); } catch (e) {}
+    pushFields({ cardFixed: state.cardFixed, cardFixedSource: 'estimate', cardCurrent: 0, cardCurrentAsOf: '', cycleYm: ym });
+  }
   function compute(now) {
     const d = now.getDate();
     const ym = ymOf(now);
     const ov = (state.overrides && state.overrides[ym]) || {};
     const salaryPaid = ov.salary !== undefined ? !!ov.salary : d >= settings.salaryDay;
     const rentPaid = ov.rent !== undefined ? !!ov.rent : d >= settings.rentDay;
-    const subsPending = (settings.subs || []).filter((s) => (num(s.day) || 1) > d);
-    const subsPendingTotal = subsPending.reduce((a, s) => a + num(s.amount), 0);
+    const cardPaid = ov.card !== undefined ? !!ov.card : d > settings.cardDay;
+    const monthLog = (hist[ym] && hist[ym].spends) ? hist[ym].spends : [];
+    const cardLog = monthLog.filter((r) => CARD_LIKE(r.method));
+    const cardUsedMonth = cardLog.reduce((a, r) => a + num(r.amount), 0);
+    // メール連動を始める前にカードアプリから入れた今月の利用額（あれば）。月替わりで0になる
+    const legacy = num(state.cardCurrent);
+    const legacyDay = (legacy > 0 && state.cardCurrentAsOf && state.cardCurrentAsOf.slice(0, 7) === ym) ? Number(state.cardCurrentAsOf.slice(8, 10)) : 0;
+    // サブスク: 今月の記録にまだ無いものは月初から引いておく（カードアプリの数字に含まれている分は除く）
+    const subs = settings.subs || [];
+    const subsExpected = subs.filter((sub) => !cardLog.some((r) => matchesSub(r, sub)) && !(legacyDay && (num(sub.day) || 1) <= legacyDay));
+    const subsExpectedTotal = subsExpected.reduce((a, sub) => a + num(sub.amount), 0);
+    const subsMatchedTotal = cardLog.filter((r) => subs.some((sub) => matchesSub(r, sub))).reduce((a, r) => a + num(r.amount), 0);
     const extrasOpen = (state.extras || []).filter((e) => !e.done);
     const extrasTotal = extrasOpen.reduce((a, e) => a + num(e.amount), 0);
-    const pend = state.spends || [];
-    const cardPend = pend.filter((s) => CARD_LIKE(s.method));
-    const bankPend = pend.filter((s) => s.method === 'bank');
-    const cardPendTotal = cardPend.reduce((a, s) => a + num(s.amount), 0);
-    const bankPendTotal = bankPend.reduce((a, s) => a + num(s.amount), 0);
+    // 口座から直接使った分（残高を入れた日より後の記録）
+    const bankAfter = Object.values(hist).flatMap((doc) => doc.spends || []).filter((r) => r.method === 'bank' && state.asOf && String(r.date) > state.asOf);
+    const bankAfterTotal = bankAfter.reduce((a, r) => a + num(r.amount), 0);
 
     const lines = [];
     lines.push({ key: 'balance', name: '口座残高', amt: num(state.balance), sign: +1, note: state.asOf ? `${md(state.asOf)} 時点` : '' });
-    if (bankPend.length) lines.push({ key: 'bank', name: '口座から直接使った分', amt: bankPendTotal, sign: -1, note: `残高入力後 ${bankPend.length}件` });
     lines.push({ key: 'salary', name: `給料 ${settings.salaryDay}日`, amt: num(settings.salary), sign: +1, skip: salaryPaid, toggle: 'salary', paid: salaryPaid, note: salaryPaid ? '口座残高に含まれている' : 'まだ入っていない' });
-    lines.push({ key: 'fixed', name: `カード 次回請求 ${settings.cardDay}日`, amt: num(state.cardFixed), sign: -1, note: '確定' });
-    lines.push({ key: 'current', name: 'カード 今月の利用額', amt: num(state.cardCurrent), sign: -1, note: 'カードアプリの数字' });
-    if (cardPend.length) lines.push({ key: 'pend', name: '記録したカード利用・チャージ', amt: cardPendTotal, sign: -1, note: `まだ載っていない ${cardPend.length}件` });
-    if (subsPending.length) lines.push({ key: 'subs', name: 'まだ載っていないサブスク', amt: subsPendingTotal, sign: -1, note: subsPending.map((s) => s.name).join('・') });
+    lines.push({ key: 'fixed', name: `カード引落 ${settings.cardDay}日`, amt: num(state.cardFixed), sign: -1, skip: cardPaid, toggle: 'card', paid: cardPaid, note: cardPaid ? '引落済み' : (state.cardFixedSource === 'estimate' ? '見込み（記録から）' : '確定') });
     lines.push({ key: 'rent', name: `家賃 ${settings.rentDay}日`, amt: num(settings.rent), sign: -1, skip: rentPaid, toggle: 'rent', paid: rentPaid, note: rentPaid ? '引落済み' : 'これから引落' });
     if (extrasOpen.length) lines.push({ key: 'extras', name: '臨時の確定支出', amt: extrasTotal, sign: -1, note: extrasOpen.map((e) => e.name).join('・') });
+    if (bankAfter.length) lines.push({ key: 'bank', name: '口座から直接使った分', amt: bankAfterTotal, sign: -1, note: `残高入力後 ${bankAfter.length}件` });
+    if (legacy > 0) lines.push({ key: 'current', name: 'カードアプリの今月利用額', amt: legacy, sign: -1, note: `${md(state.cardCurrentAsOf || state.asOf || '')} 時点` });
+    lines.push({ key: 'used', name: '今月のカード利用（記録）', amt: cardUsedMonth, sign: -1, note: `${cardLog.length}件` });
+    if (subsExpected.length) lines.push({ key: 'subs', name: 'まだ来ていないサブスク', amt: subsExpectedTotal, sign: -1, note: subsExpected.map((sub) => sub.name).join('・') });
     if (num(state.reserve) > 0) lines.push({ key: 'reserve', name: '触らないお金', amt: num(state.reserve), sign: -1 });
 
     const available = lines.reduce((a, l) => a + (l.skip ? 0 : l.sign * l.amt), 0);
-    const cardMonth = num(state.cardCurrent) + subsPendingTotal + cardPendTotal;
+    const cardMonth = legacy + cardUsedMonth + subsExpectedTotal;
 
     const events = [];
     if (extrasTotal) events.push({ day: d, name: '臨時支出', amt: -extrasTotal });
     if (!salaryPaid) events.push({ day: settings.salaryDay, name: '給料', amt: num(settings.salary) });
     if (!rentPaid) events.push({ day: settings.rentDay, name: '家賃', amt: -num(settings.rent) });
-    if (num(state.cardFixed) > 0) events.push({ day: settings.cardDay, name: 'カード引落', amt: -num(state.cardFixed) });
+    if (!cardPaid && num(state.cardFixed) > 0) events.push({ day: settings.cardDay, name: 'カード引落', amt: -num(state.cardFixed) });
     events.sort((a, b) => a.day - b.day);
-    const start = num(state.balance) - bankPendTotal;
+    const start = num(state.balance) - bankAfterTotal;
     let run = start, minRun = run, minEv = null;
     const timeline = events.map((e) => { run += e.amt; if (run < minRun) { minRun = run; minEv = e; } return { ...e, after: run }; });
 
     // 生活費のペース（暦月ベース。サブスクは除く）
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const daysLeft = daysInMonth - d + 1;
-    const subsCharged = (settings.subs || []).filter((s) => (num(s.day) || 1) <= d).reduce((a, s) => a + num(s.amount), 0);
-    const monthLog = (hist[ym] && hist[ym].spends) ? hist[ym].spends : [];
-    const cashUsed = monthLog.filter((s) => s.method === 'cash').reduce((a, s) => a + num(s.amount), 0);
-    const bankUsed = monthLog.filter((s) => s.method === 'bank').reduce((a, s) => a + num(s.amount), 0);
-    const cardLiving = Math.max(0, num(state.cardCurrent) + cardPendTotal - subsCharged);
+    const cashUsed = monthLog.filter((r) => r.method === 'cash').reduce((a, r) => a + num(r.amount), 0);
+    const bankUsed = monthLog.filter((r) => r.method === 'bank').reduce((a, r) => a + num(r.amount), 0);
+    const legacyLiving = legacyDay ? Math.max(0, legacy - subs.filter((sub) => (num(sub.day) || 1) <= legacyDay).reduce((a, sub) => a + num(sub.amount), 0)) : legacy;
+    const cardLiving = legacyLiving + Math.max(0, cardUsedMonth - subsMatchedTotal);
     const livingUsed = cardLiving + cashUsed + bankUsed;
     const livingBudget = num(settings.livingBudget);
     const livingLeft = livingBudget - livingUsed;
     const perDay = daysLeft > 0 ? Math.floor(Math.max(0, livingLeft) / daysLeft) : 0;
     const projLiving = Math.round(livingUsed * daysInMonth / d);
-    const subsRemaining = (settings.subs || []).filter((s) => (num(s.day) || 1) > d).reduce((a, s) => a + num(s.amount), 0);
-    const projCard = Math.round(num(state.cardCurrent) + cardPendTotal + subsRemaining + (cardLiving / d) * (daysInMonth - d));
+    const projCard = Math.round(cardMonth + (cardLiving / d) * (daysInMonth - d));
     const pace = { daysInMonth, daysLeft, livingBudget, livingUsed, livingLeft, perDay, cardLiving, cashUsed, bankUsed, elapsed: d / daysInMonth, projLiving, projCard };
 
-    return { d, ym, salaryPaid, rentPaid, lines, available, cardMonth, subsPendingTotal, cardPendTotal, bankPendTotal, cardPend, bankPend, extrasTotal, start, timeline, endBalance: run, minRun, minEv, pace };
+    return { d, ym, salaryPaid, rentPaid, cardPaid, lines, available, cardMonth, cardUsedMonth, cardLogCount: cardLog.length, subsExpectedTotal, legacy, bankAfterTotal, extrasTotal, start, timeline, endBalance: run, minRun, minEv, pace };
   }
 
   // ---------- render ----------
@@ -659,6 +684,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
 
   function render() {
     const now = new Date();
+    maybeRollover(now);
     const c = compute(now);
     const mm = now.getMonth() + 1, dd = now.getDate();
     const wd = ['日', '月', '火', '水', '木', '金', '土'][now.getDay()];
@@ -679,7 +705,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
 
     const lg = $('ledger'); lg.innerHTML = '';
     const GROUPS = [['in', '手元と、これから入るお金', +1], ['out', 'これから口座から出るお金', -1], ['used', 'もう使ったお金（次のカード請求など）', -1], ['keep', '取り分けておくお金', -1]];
-    const GROUP_OF = { balance: 'in', salary: 'in', fixed: 'out', rent: 'out', extras: 'out', bank: 'used', current: 'used', pend: 'used', subs: 'used', reserve: 'keep' };
+    const GROUP_OF = { balance: 'in', salary: 'in', fixed: 'out', rent: 'out', extras: 'out', bank: 'used', current: 'used', used: 'used', subs: 'used', reserve: 'keep' };
     const grouped = GROUPS.map(([g, title, sign]) => ({ g, title, sign, rows: c.lines.filter((l) => (GROUP_OF[l.key] || 'out') === g) })).filter((x) => x.rows.length);
     for (const grp of grouped) {
       const sub = grp.rows.reduce((a, l) => a + (l.skip ? 0 : l.amt), 0);
@@ -709,7 +735,6 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
 
     const hints = $('hero-hints'); hints.innerHTML = '';
     const addHint = (cls, text) => { const h = document.createElement('div'); h.className = 'hint ' + cls; h.textContent = text; hints.appendChild(h); };
-    if (c.d >= settings.cardDay && num(state.cardFixed) > 0) addHint('', `${settings.cardDay}日を過ぎています。カードの引落が済んでいれば「入力」で次回請求額を0にしてください。`);
     if (!settings.salary && !state.asOf) addHint('plain', '最初に「設定」→ データの復元欄へ初期データを貼り付けるか、手取り・家賃・サブスクを入れてください。');
     else if (!state.asOf) addHint('plain', '「入力」タブで口座残高と楽天カードの2つの数字を入れると計算が始まります。');
     else {
@@ -761,7 +786,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const target = num(settings.cardTarget);
     $('meter-val').textContent = yen(c.cardMonth);
     $('meter-target').textContent = target ? ` / ${yen(target)}` : '';
-    $('meter-sub').textContent = `カードアプリ ${yen(num(state.cardCurrent))} ＋ 記録 ${yen(c.cardPendTotal)} ＋ サブスク予定 ${yen(c.subsPendingTotal)}`;
+    $('meter-sub').textContent = `記録 ${yen(c.cardUsedMonth)}（${c.cardLogCount}件）` + (c.legacy ? ` ＋ カードアプリ分 ${yen(c.legacy)}` : '') + ` ＋ まだ来ていないサブスク ${yen(c.subsExpectedTotal)}`;
     const ratio = target ? c.cardMonth / target : 0;
     const fill = $('meter-fill');
     fill.style.width = Math.min(100, Math.max(0, ratio * 100)).toFixed(1) + '%';
@@ -775,28 +800,13 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     // input tab
     if (!formDirty) {
       $('in-balance').value = state.asOf ? yen(num(state.balance)) : '';
-      $('in-fixed').value = state.asOf ? yen(num(state.cardFixed)) : '';
-      $('in-current').value = state.asOf ? yen(num(state.cardCurrent)) : '';
+      $('in-fixed').value = (state.asOf || num(state.cardFixed)) ? yen(num(state.cardFixed)) : '';
       $('in-reserve').value = num(state.reserve) ? yen(num(state.reserve)) : '';
       $('in-pay').value = num(state.pay) ? yen(num(state.pay)) : '';
     }
     $('asof-sub').textContent = state.asOf ? `前回 ${md(state.asOf)}` : '未入力';
+    $('fixed-note').textContent = state.cardFixedSource === 'estimate' ? '見込み（記録から）。カードアプリの確定額に直す' : (num(state.cardFixed) ? '確定' : '月初に見込みが自動で入る');
 
-    const pd = $('pending'); pd.innerHTML = '';
-    const pendAll = (state.spends || []).slice().reverse();
-    $('pend-sub').textContent = pendAll.length ? `カード ${yen(c.cardPendTotal)} ／ 口座 ${yen(c.bankPendTotal)}` : '';
-    if (!pendAll.length) { const p = document.createElement('div'); p.className = 'muted'; p.textContent = 'なし'; pd.appendChild(p); }
-    for (const s of pendAll) {
-      const it = document.createElement('div'); it.className = 'item noc';
-      const nm = document.createElement('div'); nm.className = 'nm'; nm.appendChild(badge(s.method));
-      const t = document.createElement('span'); t.textContent = [s.cat, s.memo].filter(Boolean).join(' ') || ''; nm.appendChild(t);
-      const sub = document.createElement('span'); sub.className = 'sub'; sub.textContent = md(s.date); nm.appendChild(sub);
-      const am = document.createElement('div'); am.className = 'am'; am.textContent = '−' + yen(num(s.amount));
-      const x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', '消す');
-      x.addEventListener('click', () => { state.spends = state.spends.filter((q) => q.id !== s.id); try { saveState(); render(); push('clearPending', { ids: [s.id] }); } catch (err) { showErr(err); } });
-      it.append(nm, am, x); pd.appendChild(it);
-    }
-    $('pending-clear').disabled = !pendAll.length;
 
     const ex = $('extras'); ex.innerHTML = '';
     if (!(state.extras || []).length) { const p = document.createElement('div'); p.className = 'muted'; p.textContent = 'なし'; ex.appendChild(p); }
@@ -880,9 +890,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const daysSince = state.asOf ? Math.floor((now - new Date(state.asOf + 'T00:00:00')) / 86400000) : 99;
     if (daysSince >= 7) items.push({ key: 'update', text: state.asOf ? `カードアプリの数字を更新（${daysSince}日前のまま）` : 'カードアプリの数字を入れる', action: 'go-input', label: '入力へ' });
     if (num(settings.reserveMonthly) > 0 && c.d >= settings.salaryDay && !todoDone(c.ym, 'reserve')) items.push({ key: 'reserve', text: `触らないお金に ${yen(settings.reserveMonthly)} を足す（給料日）`, action: 'add-reserve', label: '足す', skip: true });
-    if (c.d >= settings.cardDay && num(state.cardFixed) > 0) items.push({ key: 'zero', text: `カード引落が済んだら次回請求額を 0 に（今 ${yen(state.cardFixed)}）`, action: 'zero-fixed', label: '0にする' });
-    const old = (state.spends || []).filter((s) => CARD_LIKE(s.method) && (now - new Date(s.date + 'T00:00:00')) / 86400000 >= 3);
-    if (old.length) items.push({ key: 'pending', text: `記録 ${old.length}件がカードアプリに載ったか確認`, action: 'go-input', label: '入力へ' });
+    if (state.cardFixedSource === 'estimate' && !c.cardPaid) items.push({ key: 'bill', text: `カードアプリで次回請求額を確認（見込み ${yen(state.cardFixed)}）`, action: 'go-input', label: '入力へ' });
     const open = (state.extras || []).filter((e) => !e.done);
     if (open.length) items.push({ key: 'extras', text: `臨時支出を確定・支払い：${open.map((e) => e.name).join('・')}`, action: 'go-input', label: '入力へ' });
     for (const t of state.todos.custom) items.push({ key: 'c:' + t.id, text: t.text, custom: t });
@@ -1032,7 +1040,6 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const memo = $('sp-memo').value.trim();
     const date = ymd(new Date());
     const entry = { id: uid(), date, amount, method: m, cat: mode === 'charge' ? '' : cat, memo, src: 'manual' };
-    if (CARD_LIKE(m) || m === 'bank') { state.spends = state.spends || []; state.spends.push({ ...entry }); }
     if (m === 'pay') state.pay = num(state.pay) - amount;
     if (m === 'charge') state.pay = num(state.pay) + amount;
     monthDoc(date.slice(0, 7)).spends.push(entry);
@@ -1068,12 +1075,6 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   $('sp-save').addEventListener('click', record);
   $('sp-amount').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); record(); } });
   $('sp-memo').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); record(); } });
-  $('pending-clear').addEventListener('click', () => {
-    const n = (state.spends || []).length; if (!n) return;
-    if (!confirm(`記録 ${n}件 を消します。カードアプリの今月利用額に含まれていることを確認してから。`)) return;
-    const ids = (state.spends || []).map((s) => s.id);
-    state.spends = []; try { saveState(); render(); push('clearPending', { ids }); } catch (e) { showErr(e); }
-  });
 
   // ---------- actions ----------
   function showToast(id, msg, err) {
@@ -1091,36 +1092,26 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
 
   $('save').addEventListener('click', () => {
     try {
-      const pend = state.spends || [];
-      const cardPend = pend.filter((s) => CARD_LIKE(s.method));
-      let keep = pend.filter((s) => s.method !== 'bank'); // 口座直接分は残高を入れ直した時点で反映済み
-      let clearedCard = false;
-      if (cardPend.length) {
-        const total = cardPend.reduce((a, s) => a + num(s.amount), 0);
-        const ok = confirm(`記録したカード利用・チャージ ${cardPend.length}件（${yen(total)}円）は、今入れた「今月の利用額」にもう含まれていますか？\n\nOK ＝ 含まれている（記録を消す）\nキャンセル ＝ まだ載っていない（記録を残す）`);
-        if (ok) { keep = keep.filter((s) => !CARD_LIKE(s.method)); clearedCard = true; }
-      }
-      const removedIds = pend.filter((s) => !keep.includes(s)).map((s) => s.id);
-      state.spends = keep;
       state.balance = num($('in-balance').value);
       state.cardFixed = num($('in-fixed').value);
-      state.cardCurrent = num($('in-current').value);
+      if (fixedDirty) state.cardFixedSource = 'confirmed';
+      fixedDirty = false;
       state.asOf = ymd(new Date());
       formDirty = false;
       saveState();
       const c = compute(new Date());
-      const entryRow = { balance: state.balance, cardFixed: state.cardFixed, cardCurrent: state.cardCurrent, available: c.available, cardMonth: c.cardMonth, reserve: num(state.reserve) };
+      const entryRow = { balance: state.balance, cardFixed: state.cardFixed, cardCurrent: c.cardMonth, available: c.available, cardMonth: c.cardMonth, reserve: num(state.reserve) };
       monthDoc(state.asOf.slice(0, 7)).entries[state.asOf] = entryRow;
       saveHist();
-      if (removedIds.length) push('clearPending', { ids: removedIds });
-      pushFields({ balance: state.balance, cardFixed: state.cardFixed, cardCurrent: state.cardCurrent, asOf: state.asOf });
+      pushFields({ balance: state.balance, cardFixed: state.cardFixed, cardFixedSource: state.cardFixedSource || 'confirmed', asOf: state.asOf });
       push('addEntry', { entry: { date: state.asOf, ...entryRow } });
       render(); showToast('toast', `保存しました。使えるお金 ${yen(c.available)}円`);
       if (document.activeElement) document.activeElement.blur();
     } catch (e) { showErr(e); }
   });
-  ['in-balance', 'in-fixed', 'in-current', 'in-reserve', 'in-pay'].forEach((id) => $(id).addEventListener('input', () => { formDirty = true; }));
-  ['in-balance', 'in-fixed', 'in-current', 'in-reserve', 'in-pay', 'ex-amount', 'st-salary', 'st-rent', 'st-cardTarget', 'sp-amount'].forEach((id) => $(id).addEventListener('blur', (ev) => { const v = ev.target.value; if (v.trim() !== '') ev.target.value = yen(num(v)); }));
+  ['in-balance', 'in-fixed', 'in-reserve', 'in-pay'].forEach((id) => $(id).addEventListener('input', () => { formDirty = true; }));
+  $('in-fixed').addEventListener('input', () => { fixedDirty = true; });
+  ['in-balance', 'in-fixed', 'in-reserve', 'in-pay', 'ex-amount', 'st-salary', 'st-rent', 'st-cardTarget', 'sp-amount'].forEach((id) => $(id).addEventListener('blur', (ev) => { const v = ev.target.value; if (v.trim() !== '') ev.target.value = yen(num(v)); }));
   $('save2').addEventListener('click', () => {
     try { state.reserve = num($('in-reserve').value); state.pay = num($('in-pay').value); formDirty = false; saveState(); render(); pushFields({ reserve: state.reserve }); push('setPay', { pay: state.pay }); showToast('toast2', '保存しました'); }
     catch (e) { showToast('toast2', '保存できませんでした', true); console.error(e); }
