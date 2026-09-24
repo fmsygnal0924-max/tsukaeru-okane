@@ -86,6 +86,9 @@ body {
 .hdr .date { font-size: 13px; color: var(--text-2); }
 .hdr .status { font-size: 11px; color: var(--text-3); display: flex; align-items: center; gap: 5px; }
 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); display: inline-block; }
+.dot.off { background: var(--line-strong); }
+.dot.warn { background: var(--warn); }
+.dot.err { background: var(--crit); }
 .main { padding: 2px 16px 8px; }
 .tab { display: flex; flex-direction: column; gap: 7px; }
 
@@ -436,6 +439,19 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         <div class="formula">使えるお金 ＝ 口座残高 － 口座から直接使った分 ＋（給料日前なら手取り）－ カード次回請求 － カード今月利用額 － 記録したカード利用・チャージ － まだ載っていないサブスク － 家賃（引落前なら）－ 臨時の確定支出 － 触らないお金</div>
       </section>
       <section class="card">
+        <div class="section-title"><span>同期（Googleスプレッドシート）</span><span class="sub" id="sync-state">未接続</span></div>
+        <div id="sync-form">
+          <div class="muted">スプレッドシートに保存すると、楽天のメール（楽天ペイ・チャージ・カード利用）から自動で記録され、iPhoneを替えてもデータが残ります。設定手順は Drive の「Yohaku同期／設定手順.txt」。</div>
+          <div class="field" style="margin-top:8px"><label for="sync-url">ウェブアプリのURL（/exec で終わる）</label><input class="input sm txt" id="sync-url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+          <div class="field" style="margin-top:8px"><label for="sync-key">合言葉（key）</label><input class="input sm txt" id="sync-key" placeholder="kv シートの info 行にある文字列" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+          <div class="actions" style="margin-top:8px"><button class="btn sm" id="sync-connect">接続する</button><span class="toast" id="toast8" aria-live="polite"></span></div>
+        </div>
+        <div id="sync-connected" hidden>
+          <div class="muted" id="sync-info"></div>
+          <div class="actions" style="margin-top:8px"><button class="btn ghost sm" id="sync-now">今すぐメールを読んで同期</button><button class="btn danger sm" id="sync-disconnect">切断</button><span class="toast" id="toast9" aria-live="polite"></span></div>
+        </div>
+      </section>
+      <section class="card">
         <div class="section-title"><span>データ（バックアップ・復元）</span></div>
         <div class="muted">データはこのiPhoneの中だけに保存されます。月1回くらい「バックアップをコピー」してメモに貼っておくと安心です。</div>
         <div class="actions"><button class="btn ghost sm" id="backup">バックアップをコピー</button><span class="toast" id="toast5" aria-live="polite"></span></div>
@@ -538,16 +554,19 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     set(k, v) { try { localStorage.setItem('yohaku:' + k, JSON.stringify(v)); return true; } catch (e) { return false; } },
     del(k) { try { localStorage.removeItem('yohaku:' + k); localStorage.removeItem('tsukaeru:' + k); } catch (e) {} },
   };
-  function load() {
-    settings = { ...EMPTY_SETTINGS, ...(LS.get('settings') || {}) };
-    state = { ...EMPTY_STATE, ...(LS.get('state') || {}) };
-    hist = LS.get('history') || {};
+  function normalizeState() {
     (state.spends || []).forEach((s) => { if (!s.method) s.method = 'card'; });
     if (!state.todos || typeof state.todos !== 'object') state.todos = { done: {}, custom: [] };
     if (!state.todos.done) state.todos.done = {};
     if (!Array.isArray(state.todos.custom)) state.todos.custom = [];
     const nowYm = ymOf(new Date());
     state.todos.custom = state.todos.custom.filter((t) => !(t.done && t.doneYm && t.doneYm < nowYm));
+  }
+  function load() {
+    settings = { ...EMPTY_SETTINGS, ...(LS.get('settings') || {}) };
+    state = { ...EMPTY_STATE, ...(LS.get('state') || {}) };
+    hist = LS.get('history') || {};
+    normalizeState();
   }
   const SAVE_ERR = 'この端末に保存できません（プライベートブラウズ？）';
   function saveSettings() { settings.updatedAt = new Date().toISOString(); if (!LS.set('settings', settings)) throw new Error(SAVE_ERR); }
@@ -748,7 +767,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       const sub = document.createElement('span'); sub.className = 'sub'; sub.textContent = md(s.date); nm.appendChild(sub);
       const am = document.createElement('div'); am.className = 'am'; am.textContent = '−' + yen(num(s.amount));
       const x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', '消す');
-      x.addEventListener('click', () => { state.spends = state.spends.filter((q) => q.id !== s.id); try { saveState(); render(); } catch (err) { showErr(err); } });
+      x.addEventListener('click', () => { state.spends = state.spends.filter((q) => q.id !== s.id); try { saveState(); render(); push('clearPending', { ids: [s.id] }); } catch (err) { showErr(err); } });
       it.append(nm, am, x); pd.appendChild(it);
     }
     $('pending-clear').disabled = !pendAll.length;
@@ -758,11 +777,11 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     for (const e of (state.extras || [])) {
       const it = document.createElement('div'); it.className = 'item' + (e.done ? ' done' : '');
       const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'cb'; cb.checked = !!e.done; cb.id = 'ex-' + e.id; cb.setAttribute('aria-label', e.name + ' 支払い済み');
-      cb.addEventListener('change', () => { e.done = cb.checked; try { saveState(); render(); } catch (err) { showErr(err); } });
+      cb.addEventListener('change', () => { e.done = cb.checked; try { saveState(); render(); pushFields({ extras: state.extras }); } catch (err) { showErr(err); } });
       const nm = document.createElement('label'); nm.className = 'nm'; nm.htmlFor = cb.id; nm.textContent = e.name;
       const am = document.createElement('div'); am.className = 'am'; am.textContent = yen(num(e.amount));
       const x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', e.name + ' を削除');
-      x.addEventListener('click', () => { state.extras = state.extras.filter((q) => q.id !== e.id); try { saveState(); render(); } catch (err) { showErr(err); } });
+      x.addEventListener('click', () => { state.extras = state.extras.filter((q) => q.id !== e.id); try { saveState(); render(); pushFields({ extras: state.extras }); } catch (err) { showErr(err); } });
       it.append(cb, nm, am, x); ex.appendChild(it);
     }
 
@@ -855,15 +874,15 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       const act = document.createElement('div'); act.className = 'act';
       if (it.custom) {
         const cb = document.createElement('input'); cb.type = 'checkbox'; cb.className = 'cb'; cb.checked = !!it.custom.done; cb.setAttribute('aria-label', it.text + ' 済み');
-        cb.addEventListener('change', () => { it.custom.done = cb.checked; it.custom.doneYm = cb.checked ? c.ym : ''; try { saveState(); render(); } catch (e) { showErr(e); } });
+        cb.addEventListener('change', () => { it.custom.done = cb.checked; it.custom.doneYm = cb.checked ? c.ym : ''; try { saveState(); render(); pushFields({ todos: state.todos }); } catch (e) { showErr(e); } });
         const x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', '削除');
-        x.addEventListener('click', () => { state.todos.custom = state.todos.custom.filter((q) => q.id !== it.custom.id); try { saveState(); render(); } catch (e) { showErr(e); } });
+        x.addEventListener('click', () => { state.todos.custom = state.todos.custom.filter((q) => q.id !== it.custom.id); try { saveState(); render(); pushFields({ todos: state.todos }); } catch (e) { showErr(e); } });
         act.append(cb, x);
       } else {
         const b = document.createElement('button'); b.type = 'button'; b.className = 'btn xs' + (it.action === 'go-input' ? ' ghost' : ''); b.textContent = it.label;
         b.addEventListener('click', () => todoAction(it));
         act.appendChild(b);
-        if (it.skip) { const s = document.createElement('button'); s.type = 'button'; s.className = 'chip'; s.textContent = '済'; s.title = '手動で済ませた'; s.addEventListener('click', () => { markTodo(it.key, true); try { saveState(); render(); } catch (e) { showErr(e); } }); act.appendChild(s); }
+        if (it.skip) { const s = document.createElement('button'); s.type = 'button'; s.className = 'chip'; s.textContent = '済'; s.title = '手動で済ませた'; s.addEventListener('click', () => { markTodo(it.key, true); try { saveState(); render(); pushFields({ todos: state.todos }); } catch (e) { showErr(e); } }); act.appendChild(s); }
       }
       row.append(nm, act); box.appendChild(row);
     }
@@ -873,11 +892,12 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       if (it.action === 'go-input') { showTab('input'); return; }
       if (it.action === 'add-reserve') {
         state.reserve = num(state.reserve) + num(settings.reserveMonthly); markTodo('reserve', true); saveState(); render();
+        pushFields({ reserve: state.reserve, todos: state.todos });
         showToast('toast-home', `触らないお金 ${yen(state.reserve)}円に`); return;
       }
       if (it.action === 'zero-fixed') {
         if (!confirm(`次回請求額 ${yen(state.cardFixed)}円 を 0 にします。口座から引き落とされたことを確認しましたか？`)) return;
-        state.cardFixed = 0; formDirty = false; saveState(); render(); showToast('toast-home', '次回請求額を 0 にしました'); return;
+        state.cardFixed = 0; formDirty = false; saveState(); render(); pushFields({ cardFixed: 0 }); showToast('toast-home', '次回請求額を 0 にしました'); return;
       }
     } catch (e) { showErr(e); }
   }
@@ -887,7 +907,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const t = $('todo-text').value.trim(); if (!t) { $('todo-text').focus(); return; }
     state.todos.custom.push({ id: uid(), text: t, done: false, doneYm: '' });
     closeTodoSheet();
-    try { saveState(); render(); showToast('toast-home', '追加しました'); } catch (e) { showErr(e); }
+    try { saveState(); render(); pushFields({ todos: state.todos }); showToast('toast-home', '追加しました'); } catch (e) { showErr(e); }
   }
   $('todo-add-toggle').addEventListener('click', openTodoSheet);
   $('todo-sheet-x').addEventListener('click', closeTodoSheet);
@@ -985,14 +1005,14 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const m = mode === 'charge' ? 'charge' : method;
     const memo = $('sp-memo').value.trim();
     const date = ymd(new Date());
-    const entry = { date, amount, method: m, cat: mode === 'charge' ? '' : cat, memo };
-    let spendId = null;
-    if (CARD_LIKE(m) || m === 'bank') { spendId = uid(); state.spends = state.spends || []; state.spends.push({ id: spendId, ...entry }); }
+    const entry = { id: uid(), date, amount, method: m, cat: mode === 'charge' ? '' : cat, memo, src: 'manual' };
+    if (CARD_LIKE(m) || m === 'bank') { state.spends = state.spends || []; state.spends.push({ ...entry }); }
     if (m === 'pay') state.pay = num(state.pay) - amount;
     if (m === 'charge') state.pay = num(state.pay) + amount;
     monthDoc(date.slice(0, 7)).spends.push(entry);
     try { saveState(); saveHist(); } catch (e) { $('sp-err').textContent = e.message; return; }
-    lastRecord = { ym: date.slice(0, 7), entry, spendId }; showUndo();
+    lastRecord = { ym: date.slice(0, 7), entry }; showUndo();
+    push('addLog', { entry });
     closeSheet(); render(); showTab('home');
     const c = compute(new Date());
     const label = METHODS[m].label;
@@ -1006,18 +1026,18 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   function showUndo() { $('undo').hidden = false; clearTimeout(undoTimer); undoTimer = setTimeout(() => { $('undo').hidden = true; lastRecord = null; }, 8000); }
   $('undo').addEventListener('click', () => {
     if (!lastRecord) return;
-    const { ym, entry, spendId } = lastRecord;
-    if (spendId) state.spends = (state.spends || []).filter((s) => s.id !== spendId);
+    const { ym, entry } = lastRecord;
+    state.spends = (state.spends || []).filter((s) => s.id !== entry.id);
     if (entry.method === 'pay') state.pay = num(state.pay) + entry.amount;
     if (entry.method === 'charge') state.pay = num(state.pay) - entry.amount;
     const doc = hist[ym];
     if (doc && doc.spends) {
-      let i = doc.spends.lastIndexOf(entry);
+      let i = doc.spends.findIndex((s) => s.id && s.id === entry.id);
       if (i < 0) { const sig = (s) => s.date + '|' + s.amount + '|' + s.method + '|' + (s.memo || ''); i = doc.spends.map(sig).lastIndexOf(sig(entry)); }
       if (i >= 0) doc.spends.splice(i, 1);
     }
     lastRecord = null; $('undo').hidden = true; clearTimeout(undoTimer);
-    try { saveState(); saveHist(); render(); showToast('toast-home', '取り消しました'); } catch (e) { showErr(e); }
+    try { saveState(); saveHist(); render(); push('deleteLog', { id: entry.id }); showToast('toast-home', '取り消しました'); } catch (e) { showErr(e); }
   });
   $('sp-save').addEventListener('click', record);
   $('sp-amount').addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); record(); } });
@@ -1025,7 +1045,8 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   $('pending-clear').addEventListener('click', () => {
     const n = (state.spends || []).length; if (!n) return;
     if (!confirm(`記録 ${n}件 を消します。カードアプリの今月利用額に含まれていることを確認してから。`)) return;
-    state.spends = []; try { saveState(); render(); } catch (e) { showErr(e); }
+    const ids = (state.spends || []).map((s) => s.id);
+    state.spends = []; try { saveState(); render(); push('clearPending', { ids }); } catch (e) { showErr(e); }
   });
 
   // ---------- actions ----------
@@ -1039,7 +1060,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const ym = ymOf(new Date());
     state.overrides = state.overrides || {};
     state.overrides[ym] = { ...(state.overrides[ym] || {}), [key]: paid };
-    try { saveState(); render(); } catch (e) { showErr(e); }
+    try { saveState(); render(); pushFields({ overrides: state.overrides }); } catch (e) { showErr(e); }
   }
 
   $('save').addEventListener('click', () => {
@@ -1047,11 +1068,13 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       const pend = state.spends || [];
       const cardPend = pend.filter((s) => CARD_LIKE(s.method));
       let keep = pend.filter((s) => s.method !== 'bank'); // 口座直接分は残高を入れ直した時点で反映済み
+      let clearedCard = false;
       if (cardPend.length) {
         const total = cardPend.reduce((a, s) => a + num(s.amount), 0);
         const ok = confirm(`記録したカード利用・チャージ ${cardPend.length}件（${yen(total)}円）は、今入れた「今月の利用額」にもう含まれていますか？\n\nOK ＝ 含まれている（記録を消す）\nキャンセル ＝ まだ載っていない（記録を残す）`);
-        if (ok) keep = keep.filter((s) => !CARD_LIKE(s.method));
+        if (ok) { keep = keep.filter((s) => !CARD_LIKE(s.method)); clearedCard = true; }
       }
+      const removedIds = pend.filter((s) => !keep.includes(s)).map((s) => s.id);
       state.spends = keep;
       state.balance = num($('in-balance').value);
       state.cardFixed = num($('in-fixed').value);
@@ -1060,8 +1083,12 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       formDirty = false;
       saveState();
       const c = compute(new Date());
-      monthDoc(state.asOf.slice(0, 7)).entries[state.asOf] = { balance: state.balance, cardFixed: state.cardFixed, cardCurrent: state.cardCurrent, available: c.available, cardMonth: c.cardMonth, reserve: num(state.reserve) };
+      const entryRow = { balance: state.balance, cardFixed: state.cardFixed, cardCurrent: state.cardCurrent, available: c.available, cardMonth: c.cardMonth, reserve: num(state.reserve) };
+      monthDoc(state.asOf.slice(0, 7)).entries[state.asOf] = entryRow;
       saveHist();
+      if (removedIds.length) push('clearPending', { ids: removedIds });
+      pushFields({ balance: state.balance, cardFixed: state.cardFixed, cardCurrent: state.cardCurrent, asOf: state.asOf });
+      push('addEntry', { entry: { date: state.asOf, ...entryRow } });
       render(); showToast('toast', `保存しました。使えるお金 ${yen(c.available)}円`);
       if (document.activeElement) document.activeElement.blur();
     } catch (e) { showErr(e); }
@@ -1069,7 +1096,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   ['in-balance', 'in-fixed', 'in-current', 'in-reserve', 'in-pay'].forEach((id) => $(id).addEventListener('input', () => { formDirty = true; }));
   ['in-balance', 'in-fixed', 'in-current', 'in-reserve', 'in-pay', 'ex-amount', 'st-salary', 'st-rent', 'st-cardTarget', 'sp-amount'].forEach((id) => $(id).addEventListener('blur', (ev) => { const v = ev.target.value; if (v.trim() !== '') ev.target.value = yen(num(v)); }));
   $('save2').addEventListener('click', () => {
-    try { state.reserve = num($('in-reserve').value); state.pay = num($('in-pay').value); formDirty = false; saveState(); render(); showToast('toast2', '保存しました'); }
+    try { state.reserve = num($('in-reserve').value); state.pay = num($('in-pay').value); formDirty = false; saveState(); render(); pushFields({ reserve: state.reserve }); push('setPay', { pay: state.pay }); showToast('toast2', '保存しました'); }
     catch (e) { showToast('toast2', '保存できませんでした', true); console.error(e); }
   });
   $('ex-add').addEventListener('click', () => {
@@ -1077,7 +1104,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     if (!name || !amount) { showToast('toast', '名前と金額を入れてください', true); return; }
     state.extras = state.extras || []; state.extras.push({ id: uid(), name, amount, done: false });
     $('ex-name').value = ''; $('ex-amount').value = '';
-    try { saveState(); render(); } catch (e) { showErr(e); }
+    try { saveState(); render(); pushFields({ extras: state.extras }); } catch (e) { showErr(e); }
   });
   ['st-salary', 'st-salaryDay', 'st-rent', 'st-rentDay', 'st-cardDay', 'st-cardTarget', 'st-living', 'st-reserve'].forEach((id) => $(id).addEventListener('input', () => { settingsDirty = true; }));
   $('sub-add').addEventListener('click', () => { settingsDirty = true; settings.subs = settings.subs || []; settings.subs.push({ id: uid(), name: '', amount: 0, day: 1 }); renderSubs(); });
@@ -1092,7 +1119,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       settings.livingBudget = num($('st-living').value);
       settings.reserveMonthly = num($('st-reserve').value);
       settings.subs = (settings.subs || []).filter((s) => s.name || s.amount).map((s) => ({ id: s.id || uid(), name: s.name || '', amount: num(s.amount), day: Math.min(31, Math.max(1, num(s.day) || 1)) }));
-      settingsDirty = false; saveSettings(); render(); showToast('toast4', '設定を保存しました');
+      settingsDirty = false; saveSettings(); render(); push('saveSettings', { settings }); showToast('toast4', '設定を保存しました');
     } catch (e) { showToast('toast4', '保存できませんでした', true); console.error(e); }
   });
 
@@ -1119,13 +1146,124 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const txt = $('restore-text').value.trim();
     if (!txt) { showToast('toast6', '貼り付けてから押してください', true); return; }
     if (settings.salary || state.asOf) { if (!confirm('今のデータを貼り付けた内容で置き換えます。よろしいですか？')) return; }
-    try { applyImport(JSON.parse(txt)); $('restore-text').value = ''; render(); showToast('toast6', '復元しました'); }
+    try { applyImport(JSON.parse(txt)); $('restore-text').value = ''; render(); if (getSync()) push('bootstrap', { settings, state, log: flattenLog(), entries: flattenEntries() }); showToast('toast6', '復元しました'); }
     catch (e) { showToast('toast6', '復元できませんでした：' + e.message, true); }
   });
   $('wipe').addEventListener('click', () => {
-    if (!confirm('設定・数字・履歴をすべて消します。元に戻せません。よろしいですか？')) return;
-    LS.del('settings'); LS.del('state'); LS.del('history'); load(); formDirty = false; settingsDirty = false; render(); showToast('toast6', '消しました');
+    if (!confirm('この端末の設定・数字・履歴をすべて消し、同期も切ります（スプレッドシート側は残ります）。元に戻せません。よろしいですか？')) return;
+    LS.del('settings'); LS.del('state'); LS.del('history'); LS.del('sync'); LS.del('queue'); load(); formDirty = false; settingsDirty = false; render(); setSyncUI('local'); renderSyncUI(); showToast('toast6', '消しました');
   });
+
+  // ---------- 同期（Googleスプレッドシート＋Apps Script） ----------
+  const getSync = () => LS.get('sync');
+  let syncBusy = false, lastSyncAt = '';
+  const hhmm = () => { const d = new Date(); return pad2(d.getHours()) + ':' + pad2(d.getMinutes()); };
+  function setSyncUI(status, text) {
+    const dot = document.querySelector('.hdr .dot'); const t = $('conn');
+    const q = (LS.get('queue') || []).length;
+    const map = { local: ['off', 'この端末に保存'], synced: ['', lastSyncAt ? `同期済み ${lastSyncAt}` : '同期済み'], syncing: ['', '同期中…'], queued: ['warn', `未送信 ${q}件`], error: ['err', '同期エラー'] };
+    const m = map[status] || map.local; dot.className = 'dot ' + m[0]; t.textContent = text || m[1];
+    const st = $('sync-state'); if (st) st.textContent = getSync() ? t.textContent : '未接続';
+  }
+  function friendlyErr(e) { const s = String((e && e.message) || e); if (s === 'key') return '合言葉が違います'; if (/Failed to fetch|Load failed|NetworkError/i.test(s)) return 'つながりません（URLか通信を確認）'; if (/abort/i.test(s)) return '応答がありません'; return s; }
+  async function apiPost(action, payload) {
+    const cfg = getSync(); if (!cfg || !cfg.url) throw new Error('未接続');
+    const ctrl = new AbortController(); const tm = setTimeout(() => ctrl.abort(), 30000);
+    try {
+      const res = await fetch(cfg.url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(Object.assign({ key: cfg.key, action }, payload || {})), signal: ctrl.signal });
+      const j = await res.json(); if (!j.ok) throw new Error(j.error || 'サーバーエラー'); return j;
+    } finally { clearTimeout(tm); }
+  }
+  async function apiGetAll() {
+    const cfg = getSync(); if (!cfg || !cfg.url) throw new Error('未接続');
+    const res = await fetch(cfg.url + '?key=' + encodeURIComponent(cfg.key) + '&action=all&_=' + Date.now(), { cache: 'no-store' });
+    const j = await res.json(); if (!j.ok) throw new Error(j.error || 'サーバーエラー'); return j;
+  }
+  function buildHist(log, entries) {
+    const h = {};
+    const doc = (ym) => h[ym] || (h[ym] = { ym, entries: {}, spends: [] });
+    for (const r of (log || [])) { const date = String(r.date || ''); if (date.length < 7) continue; doc(date.slice(0, 7)).spends.push({ id: String(r.id), date, amount: num(r.amount), method: r.method || 'card', cat: r.cat || '', memo: r.memo || '', merchant: r.merchant || '', src: r.src || '', createdAt: r.createdAt || '' }); }
+    for (const e of (entries || [])) { const date = String(e.date || ''); if (date.length < 7) continue; doc(date.slice(0, 7)).entries[date] = { balance: num(e.balance), cardFixed: num(e.cardFixed), cardCurrent: num(e.cardCurrent), available: num(e.available), cardMonth: num(e.cardMonth), reserve: num(e.reserve) }; }
+    Object.values(h).forEach((d) => d.spends.sort((a, b) => (a.date + '|' + a.createdAt).localeCompare(b.date + '|' + b.createdAt)));
+    return h;
+  }
+  function flattenLog() {
+    const out = [];
+    for (const ym of Object.keys(hist)) for (const s of (hist[ym].spends || [])) {
+      if (!s.id) { const hit = (state.spends || []).find((q) => q.date === s.date && num(q.amount) === num(s.amount) && q.method === s.method && (q.memo || '') === (s.memo || '')); s.id = hit ? hit.id : uid(); }
+      out.push({ id: s.id, date: s.date, amount: num(s.amount), method: s.method || 'card', cat: s.cat || '', memo: s.memo || '', merchant: s.merchant || '', src: s.src || 'manual' });
+    }
+    return out;
+  }
+  function flattenEntries() { const out = []; for (const ym of Object.keys(hist)) { const ents = hist[ym].entries || {}; for (const date of Object.keys(ents)) out.push({ date, ...ents[date] }); } return out; }
+  function applyServer(j) {
+    if (!j || !j.ok) return;
+    settings = { ...EMPTY_SETTINGS, ...(j.settings || {}) };
+    state = { ...EMPTY_STATE, ...(j.state || {}) };
+    normalizeState();
+    hist = buildHist(j.log, j.entries);
+    LS.set('settings', settings); LS.set('state', state); LS.set('history', hist);
+    formDirty = false; settingsDirty = false; render();
+  }
+  function push(action, payload) {
+    if (!getSync()) return;
+    const q = LS.get('queue') || []; q.push({ action, payload: payload || {}, t: Date.now() }); LS.set('queue', q);
+    setSyncUI('queued'); flush();
+  }
+  const pushFields = (fields) => push('setFields', { fields });
+  async function flush() {
+    if (syncBusy || !getSync()) return;
+    if (!(LS.get('queue') || []).length) return;
+    syncBusy = true; setSyncUI('syncing');
+    try {
+      let last = null;
+      for (let guard = 0; guard < 200; guard++) {
+        const q = LS.get('queue') || []; if (!q.length) break;
+        last = await apiPost(q[0].action, q[0].payload);
+        const q2 = LS.get('queue') || []; q2.shift(); LS.set('queue', q2);
+      }
+      if (last) applyServer(last);
+      lastSyncAt = hhmm(); setSyncUI('synced');
+    } catch (e) { console.warn('sync', e); if (navigator.onLine === false) setSyncUI('queued'); else setSyncUI('error', '同期エラー：' + friendlyErr(e)); }
+    finally { syncBusy = false; }
+  }
+  const isEmptyServer = (j) => (!j.settings || !Object.keys(j.settings).length) && (!j.state || !Object.keys(j.state).length);
+  async function pull() {
+    if (!getSync() || syncBusy) return;
+    if ((LS.get('queue') || []).length) return flush();
+    syncBusy = true; setSyncUI('syncing'); let needBootstrap = false;
+    try { const j = await apiGetAll(); if (isEmptyServer(j)) needBootstrap = true; else { applyServer(j); lastSyncAt = hhmm(); setSyncUI('synced'); } }
+    catch (e) { console.warn('pull', e); if (navigator.onLine === false) setSyncUI('queued'); else setSyncUI('error', '同期エラー：' + friendlyErr(e)); }
+    finally { syncBusy = false; }
+    // スプレッドシートが空なら、この端末の内容を送る（空の内容で上書きしない）
+    if (needBootstrap) push('bootstrap', { settings, state, log: flattenLog(), entries: flattenEntries() });
+  }
+  function renderSyncUI() {
+    const cfg = getSync();
+    $('sync-form').hidden = !!cfg; $('sync-connected').hidden = !cfg;
+    if (cfg) { const tail = cfg.url.replace(/^https:\/\/script\.google\.com\/macros\/s\//, '').slice(0, 10); $('sync-info').textContent = `接続先: script.google.com/…/${tail}…/exec。楽天のメールは5分おきに自動で読み込まれます。`; }
+    else { $('sync-url').value = ''; $('sync-key').value = ''; }
+  }
+  $('sync-connect').addEventListener('click', async () => {
+    const url = $('sync-url').value.trim().replace(/\/+$/, ''); const key = $('sync-key').value.trim();
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/[^/]+\/exec$/.test(url)) { showToast('toast8', 'URLは https://script.google.com/macros/s/…/exec の形です', true); return; }
+    if (!key) { showToast('toast8', '合言葉（key）を入れてください', true); return; }
+    LS.set('sync', { url, key }); $('sync-connect').disabled = true; showToast('toast8', '接続しています…');
+    try {
+      let j = await apiGetAll();
+      const serverEmpty = isEmptyServer(j);
+      if (serverEmpty) j = await apiPost('bootstrap', { settings, state, log: flattenLog(), entries: flattenEntries() });
+      applyServer(j); lastSyncAt = hhmm(); setSyncUI('synced'); renderSyncUI();
+      showToast('toast9', serverEmpty ? '接続しました。この端末のデータを送りました' : '接続しました。スプレッドシートの内容を読み込みました');
+    } catch (e) { LS.del('sync'); setSyncUI('local'); renderSyncUI(); showToast('toast8', '接続できません：' + friendlyErr(e), true); }
+    finally { $('sync-connect').disabled = false; }
+  });
+  $('sync-now').addEventListener('click', async () => {
+    showToast('toast9', 'メールを読み込んで同期しています…'); push('scan');
+    for (let i = 0; i < 150; i++) { await new Promise((r) => setTimeout(r, 200)); if (!syncBusy && !(LS.get('queue') || []).length) break; }
+    showToast('toast9', (LS.get('queue') || []).length ? '同期できていません。通信を確認してください' : '同期しました', !!(LS.get('queue') || []).length);
+  });
+  $('sync-disconnect').addEventListener('click', () => { if (!confirm('同期を切ります。スプレッドシートのデータは残り、この端末は今の内容のまま単独で動きます。')) return; LS.del('sync'); LS.del('queue'); setSyncUI('local'); renderSyncUI(); });
 
   // ---------- boot ----------
   load();
@@ -1141,8 +1279,13 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   setToggle('ledger-toggle', 'ledger', !!LS.get('ledgerOpen'), '内訳を隠す', '内訳を見る', 'ledgerOpen');
   setToggle('tl-toggle', 'check-tl', !!LS.get('tlOpen'), '明細を隠す', '入出金の明細を見る', 'tlOpen');
   render();
+  renderSyncUI();
+  if (getSync()) { setSyncUI((LS.get('queue') || []).length ? 'queued' : 'synced'); flush().then(pull); } else setSyncUI('local');
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && getSync()) flush().then(pull); });
+  window.addEventListener('online', () => { if (getSync()) flush().then(pull); });
+  setInterval(() => { if (document.visibilityState === 'visible' && getSync()) pull(); }, 180000);
 
-  const standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+  const standalone =window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
   if (!standalone && !LS.get('hideInstallHint')) $('install-hint').hidden = false;
   $('install-hint-x').addEventListener('click', () => { $('install-hint').hidden = true; LS.set('hideInstallHint', true); });
 
