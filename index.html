@@ -137,6 +137,8 @@ body {
 .hero-num.neg { color: var(--crit-ink); }
 .hero-num.pos { color: var(--good-ink); }
 .hero-caption { color: var(--text-2); font-size: 12px; }
+.hero-next { font-size: 12px; color: var(--text-2); background: var(--surface-2); border-radius: 8px; padding: 5px 9px; font-variant-numeric: tabular-nums; }
+.hero-next b { color: var(--text); font-weight: 600; }
 .hero-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .linkbtn { font: inherit; font-size: 13px; color: var(--accent-ink); background: none; border: 0; padding: 4px 0; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
 .linkbtn:focus-visible { outline: 2px solid var(--focus); border-radius: 4px; }
@@ -315,6 +317,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
           <span class="hero-caption">手元と給料から、これから出るお金と、もう使ったお金を引いた残り</span>
           <button type="button" class="linkbtn" id="ledger-toggle" aria-expanded="false" aria-controls="ledger" style="white-space:nowrap">内訳を見る</button>
         </div>
+        <div class="hero-next" id="hero-next"></div>
         <div class="hero-foot" id="hero-toast-row" hidden style="justify-content:flex-end">
           <span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="toast" id="toast-home" aria-live="polite"></span><button type="button" class="linkbtn" id="undo" hidden>取り消す</button></span>
         </div>
@@ -665,6 +668,14 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     hero.classList.toggle('neg', c.available < 0);
     hero.classList.toggle('pos', c.available >= 0);
     $('hero-val').textContent = yen(c.available);
+    $('hero-label').textContent = `${mm}月末まで（あと${c.pace.daysLeft}日）に使えるお金`;
+    const nextMonth = (now.getMonth() + 1) % 12 + 1;
+    const subsAll = (settings.subs || []).reduce((a, s) => a + num(s.amount), 0);
+    const nextEnvelope = num(settings.salary) - num(settings.rent) - subsAll;
+    const hn = $('hero-next');
+    if (!settings.salary) hn.hidden = true;
+    else if (c.available >= 0) { hn.hidden = false; hn.innerHTML = `1日あたり <b>${yen(Math.floor(c.available / Math.max(1, c.pace.daysLeft)))}円</b> まで。${nextMonth}/1 に来月分 <b>+${yen(nextEnvelope)}</b>（給料 − 家賃 − サブスク）が足されます`; }
+    else { hn.hidden = false; hn.innerHTML = `今月分は使い切り。${nextMonth}/1 に来月分 <b>+${yen(nextEnvelope)}</b>（給料 − 家賃 − サブスク）が足されて <b>${yen(c.available + nextEnvelope)}円</b> になる見込み`; }
 
     const lg = $('ledger'); lg.innerHTML = '';
     const GROUPS = [['in', '手元と、これから入るお金', +1], ['out', 'これから口座から出るお金', -1], ['used', 'もう使ったお金（次のカード請求など）', -1], ['keep', '取り分けておくお金', -1]];
