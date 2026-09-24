@@ -1198,6 +1198,16 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   function flattenEntries() { const out = []; for (const ym of Object.keys(hist)) { const ents = hist[ym].entries || {}; for (const date of Object.keys(ents)) out.push({ date, ...ents[date] }); } return out; }
   function applyServer(j) {
     if (!j || !j.ok) return;
+    // 守り: スプレッドシート側に設定が無いのに端末には設定がある場合、端末の設定・数字を消さずに送り直す
+    const srvSettingsEmpty = !j.settings || !Object.keys(j.settings).length;
+    if (srvSettingsEmpty && (settings.salary || state.asOf)) {
+      const srv = j.state || {};
+      const ids = new Set((state.spends || []).map((s) => s.id));
+      const merged = { ...state, spends: [...(state.spends || []), ...((srv.spends || []).filter((s) => !ids.has(s.id)))], pay: num(state.pay) + num(srv.pay) };
+      state = merged; LS.set('state', state);
+      push('bootstrap', { settings, state: merged, log: flattenLog(), entries: flattenEntries() });
+      render(); return;
+    }
     settings = { ...EMPTY_SETTINGS, ...(j.settings || {}) };
     state = { ...EMPTY_STATE, ...(j.state || {}) };
     normalizeState();
