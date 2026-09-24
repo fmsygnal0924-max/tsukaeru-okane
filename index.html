@@ -602,8 +602,8 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     }
     if (state.cycleYm === ym) return;
     const prevYm = state.cycleYm;
-    const prevLog = ((hist[prevYm] && hist[prevYm].spends) || []).filter((r) => CARD_LIKE(r.method));
     const legacyDay = (num(state.cardCurrent) > 0 && state.cardCurrentAsOf && state.cardCurrentAsOf.slice(0, 7) === prevYm) ? Number(state.cardCurrentAsOf.slice(8, 10)) : 0;
+    const prevLog = ((hist[prevYm] && hist[prevYm].spends) || []).filter((r) => CARD_LIKE(r.method) && !(legacyDay && Number(String(r.date).slice(8, 10)) <= legacyDay));
     const subs = settings.subs || [];
     const unmatched = subs.filter((sub) => !prevLog.some((r) => matchesSub(r, sub)) && !(legacyDay && (num(sub.day) || 1) <= legacyDay));
     const est = num(state.cardCurrent) + prevLog.reduce((a, r) => a + num(r.amount), 0) + unmatched.reduce((a, sub) => a + num(sub.amount), 0);
@@ -620,11 +620,11 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const rentPaid = ov.rent !== undefined ? !!ov.rent : d >= settings.rentDay;
     const cardPaid = ov.card !== undefined ? !!ov.card : d > settings.cardDay;
     const monthLog = (hist[ym] && hist[ym].spends) ? hist[ym].spends : [];
-    const cardLog = monthLog.filter((r) => CARD_LIKE(r.method));
-    const cardUsedMonth = cardLog.reduce((a, r) => a + num(r.amount), 0);
-    // メール連動を始める前にカードアプリから入れた今月の利用額（あれば）。月替わりで0になる
+    // メール連動を始める前にカードアプリから入れた今月の利用額（あれば）。その日までの記録はこの数字に含まれている扱い。月替わりで0になる
     const legacy = num(state.cardCurrent);
     const legacyDay = (legacy > 0 && state.cardCurrentAsOf && state.cardCurrentAsOf.slice(0, 7) === ym) ? Number(state.cardCurrentAsOf.slice(8, 10)) : 0;
+    const cardLog = monthLog.filter((r) => CARD_LIKE(r.method) && !(legacyDay && Number(String(r.date).slice(8, 10)) <= legacyDay));
+    const cardUsedMonth = cardLog.reduce((a, r) => a + num(r.amount), 0);
     // サブスク: 今月の記録にまだ無いものは月初から引いておく（カードアプリの数字に含まれている分は除く）
     const subs = settings.subs || [];
     const subsExpected = subs.filter((sub) => !cardLog.some((r) => matchesSub(r, sub)) && !(legacyDay && (num(sub.day) || 1) <= legacyDay));
