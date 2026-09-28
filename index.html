@@ -378,6 +378,18 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         <div class="actions"><button class="btn ghost sm" id="ex-add">追加</button><span class="muted">カードの利用額に載ったら、チェック済みにして二重計上を防ぐ</span></div>
       </section>
       <section class="card">
+        <div class="section-title"><span>借入（返すお金）</span><span class="sub" id="debt-sub"></span></div>
+        <div class="list" id="debts"></div>
+        <div class="row2">
+          <input class="input sm txt" id="debt-name" placeholder="名前（例：アコム）" autocomplete="off">
+          <input class="input sm" id="debt-balance" inputmode="numeric" placeholder="残高">
+          <input class="input sm" id="debt-monthly" inputmode="numeric" placeholder="毎月の返済額">
+          <input class="input sm" id="debt-day" inputmode="numeric" placeholder="返済日（1〜31）">
+        </div>
+        <div class="actions"><button class="btn ghost sm" id="debt-add">追加・更新</button><span class="toast" id="toast10" aria-live="polite"></span></div>
+        <div class="muted">借りたお金は口座に入っていても「使えるお金」から引きます。同じ名前で入れ直すと上書き。返済したら「返済した」で残高が減ります（生活費には数えません）。</div>
+      </section>
+      <section class="card">
         <div class="row2">
           <div class="field">
             <label for="in-reserve"><span>触らないお金</span></label>
@@ -436,7 +448,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         <div class="actions"><button class="btn ghost sm" id="sub-add">サブスクを追加</button></div>
         <div class="muted">引落日より前なら「まだカードに載っていない予定分」として今月の利用額に上乗せ。当日以降は上乗せしない。</div>
         <div class="actions"><button class="btn" id="save-settings">設定を保存</button><span class="toast" id="toast4" aria-live="polite"></span></div>
-        <div class="formula">使えるお金 ＝ 口座残高 － 口座から直接使った分 ＋（給料日前なら手取り）－ カード次回請求 － カード今月利用額 － 記録したカード利用・チャージ － まだ載っていないサブスク － 家賃（引落前なら）－ 臨時の確定支出 － 触らないお金</div>
+        <div class="formula">使えるお金 ＝ 口座残高 － 口座から直接使った分 ＋（給料日前なら手取り）－ カード次回請求 － カード今月利用額 － 記録したカード利用・チャージ － まだ載っていないサブスク － 家賃（引落前なら）－ 臨時の確定支出 － 借入の残高 － 触らないお金</div>
       </section>
       <section class="card">
         <div class="section-title"><span>同期（Googleスプレッドシート）</span><span class="sub" id="sync-state">未接続</span></div>
@@ -543,7 +555,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   const CARD_LIKE = (m) => m === 'card' || m === 'charge';
 
   const EMPTY_SETTINGS = { salary: 0, salaryDay: 25, rent: 0, rentDay: 26, cardDay: 27, cardTarget: 0, livingBudget: 70000, reserveMonthly: 15000, subs: [] };
-  const EMPTY_STATE = { balance: 0, cardFixed: 0, cardCurrent: 0, reserve: 0, pay: 0, extras: [], spends: [], overrides: {}, todos: { done: {}, custom: [] }, asOf: '', updatedAt: '' };
+  const EMPTY_STATE = { balance: 0, cardFixed: 0, cardCurrent: 0, reserve: 0, pay: 0, extras: [], spends: [], debts: [], overrides: {}, todos: { done: {}, custom: [] }, asOf: '', updatedAt: '' };
   let settings = { ...EMPTY_SETTINGS };
   let state = { ...EMPTY_STATE };
   let hist = {};
@@ -649,6 +661,10 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     if (legacy > 0) lines.push({ key: 'current', name: 'カードアプリの今月利用額', amt: legacy, sign: -1, note: `${md(state.cardCurrentAsOf || state.asOf || '')} 時点` });
     lines.push({ key: 'used', name: '今月のカード利用（記録）', amt: cardUsedMonth, sign: -1, note: `${cardLog.length}件` });
     if (subsExpected.length) lines.push({ key: 'subs', name: 'まだ来ていないサブスク', amt: subsExpectedTotal, sign: -1, note: subsExpected.map((sub) => sub.name).join('・') });
+    // 借入: 口座に入っていても自分のお金ではないので引く
+    const debts = (state.debts || []).filter((x) => num(x.balance) > 0);
+    const debtTotal = debts.reduce((a, x) => a + num(x.balance), 0);
+    debts.forEach((x) => lines.push({ key: 'debt', name: `借入 ${x.name}`, amt: num(x.balance), sign: -1, note: (num(x.monthly) && num(x.payDay)) ? `毎月${num(x.payDay)}日 ${yen(num(x.monthly))}` : '返済予定が未設定' }));
     if (num(state.reserve) > 0) lines.push({ key: 'reserve', name: '触らないお金', amt: num(state.reserve), sign: -1 });
 
     const available = lines.reduce((a, l) => a + (l.skip ? 0 : l.sign * l.amt), 0);
@@ -659,6 +675,8 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     if (!salaryPaid) events.push({ day: settings.salaryDay, name: '給料', amt: num(settings.salary) });
     if (!rentPaid) events.push({ day: settings.rentDay, name: '家賃', amt: -num(settings.rent) });
     if (!cardPaid && num(state.cardFixed) > 0) events.push({ day: settings.cardDay, name: 'カード引落', amt: -num(state.cardFixed) });
+    const doneMap = (state.todos && state.todos.done && state.todos.done[ym]) || {};
+    debts.forEach((x) => { if (num(x.monthly) > 0 && num(x.payDay) > 0 && !doneMap['debt:' + x.id]) events.push({ day: Math.max(d, num(x.payDay)), name: `${x.name}返済`, amt: -Math.min(num(x.monthly), num(x.balance)) }); });
     events.sort((a, b) => a.day - b.day);
     const start = num(state.balance) - bankAfterTotal;
     let run = start, minRun = run, minEv = null;
@@ -668,7 +686,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const daysLeft = daysInMonth - d + 1;
     const cashUsed = monthLog.filter((r) => r.method === 'cash').reduce((a, r) => a + num(r.amount), 0);
-    const bankUsed = monthLog.filter((r) => r.method === 'bank').reduce((a, r) => a + num(r.amount), 0);
+    const bankUsed = monthLog.filter((r) => r.method === 'bank' && r.cat !== '返済').reduce((a, r) => a + num(r.amount), 0);
     const legacyLiving = legacyDay ? Math.max(0, legacy - subs.filter((sub) => (num(sub.day) || 1) <= legacyDay).reduce((a, sub) => a + num(sub.amount), 0)) : legacy;
     const cardLiving = legacyLiving + Math.max(0, cardUsedMonth - subsMatchedTotal);
     const livingUsed = cardLiving + cashUsed + bankUsed;
@@ -679,7 +697,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const projCard = Math.round(cardMonth + (cardLiving / d) * (daysInMonth - d));
     const pace = { daysInMonth, daysLeft, livingBudget, livingUsed, livingLeft, perDay, cardLiving, cashUsed, bankUsed, elapsed: d / daysInMonth, projLiving, projCard };
 
-    return { d, ym, salaryPaid, rentPaid, cardPaid, lines, available, cardMonth, cardUsedMonth, cardLogCount: cardLog.length, subsExpectedTotal, legacy, bankAfterTotal, extrasTotal, start, timeline, endBalance: run, minRun, minEv, pace };
+    return { d, ym, salaryPaid, rentPaid, cardPaid, lines, available, cardMonth, cardUsedMonth, cardLogCount: cardLog.length, subsExpectedTotal, legacy, bankAfterTotal, extrasTotal, debtTotal, start, timeline, endBalance: run, minRun, minEv, pace };
   }
 
   // ---------- render ----------
@@ -707,8 +725,8 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     else { hn.hidden = false; hn.innerHTML = `今月分は使い切り。${nextMonth}/1 に来月分 <b>+${yen(nextEnvelope)}</b>（給料 − 家賃 − サブスク）が足されて <b>${yen(c.available + nextEnvelope)}円</b> になる見込み`; }
 
     const lg = $('ledger'); lg.innerHTML = '';
-    const GROUPS = [['in', '手元と、これから入るお金', +1], ['out', 'これから口座から出るお金', -1], ['used', 'もう使ったお金（次のカード請求など）', -1], ['keep', '取り分けておくお金', -1]];
-    const GROUP_OF = { balance: 'in', salary: 'in', fixed: 'out', rent: 'out', extras: 'out', bank: 'used', current: 'used', used: 'used', subs: 'used', reserve: 'keep' };
+    const GROUPS = [['in', '手元と、これから入るお金', +1], ['out', 'これから口座から出るお金', -1], ['used', 'もう使ったお金（次のカード請求など）', -1], ['debt', '借りているお金（返す分）', -1], ['keep', '取り分けておくお金', -1]];
+    const GROUP_OF = { balance: 'in', salary: 'in', fixed: 'out', rent: 'out', extras: 'out', bank: 'used', current: 'used', used: 'used', subs: 'used', debt: 'debt', reserve: 'keep' };
     const grouped = GROUPS.map(([g, title, sign]) => ({ g, title, sign, rows: c.lines.filter((l) => (GROUP_OF[l.key] || 'out') === g) })).filter((x) => x.rows.length);
     for (const grp of grouped) {
       const sub = grp.rows.reduce((a, l) => a + (l.skip ? 0 : l.amt), 0);
@@ -733,7 +751,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       }
     }
     const tot = document.createElement('div'); tot.className = 'row total';
-    tot.innerHTML = `<div class="label"><span class="name">使えるお金 ＝ 入る − 出る − 使った − 取り分け</span></div><div class="amt ${c.available < 0 ? 'minus' : 'plus'}">${yen(c.available)}</div>`;
+    tot.innerHTML = `<div class="label"><span class="name">使えるお金 ＝ 入る − 出る − 使った − 借入 − 取り分け</span></div><div class="amt ${c.available < 0 ? 'minus' : 'plus'}">${yen(c.available)}</div>`;
     lg.appendChild(tot);
 
     const hints = $('hero-hints'); hints.innerHTML = '';
@@ -810,6 +828,23 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     $('asof-sub').textContent = state.asOf ? `前回 ${md(state.asOf)}` : '未入力';
     $('fixed-note').textContent = state.cardFixedSource === 'estimate' ? '見込み（記録から）。カードアプリの確定額に直す' : (num(state.cardFixed) ? '確定' : '月初に見込みが自動で入る');
 
+
+    const db = $('debts'); db.innerHTML = '';
+    const allDebts = state.debts || [];
+    $('debt-sub').textContent = c.debtTotal ? `残り合計 ${yen(c.debtTotal)}円` : '';
+    if (!allDebts.length) { const p = document.createElement('div'); p.className = 'muted'; p.textContent = 'なし'; db.appendChild(p); }
+    for (const x of allDebts) {
+      const it = document.createElement('div'); it.className = 'item noc' + (num(x.balance) <= 0 ? ' done' : '');
+      const nm = document.createElement('div'); nm.className = 'nm'; nm.textContent = x.name;
+      const sub = document.createElement('span'); sub.className = 'sub'; sub.textContent = num(x.balance) > 0 ? ((num(x.monthly) && num(x.payDay)) ? `毎月${num(x.payDay)}日 ${yen(num(x.monthly))}円` : '返済予定が未設定') : '完済'; nm.appendChild(sub);
+      const am = document.createElement('div'); am.className = 'am'; am.textContent = yen(num(x.balance));
+      const act = document.createElement('div'); act.className = 'act'; act.style.display = 'flex'; act.style.gap = '4px'; act.style.alignItems = 'center';
+      if (num(x.balance) > 0) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn xs'; b.textContent = '返済した'; b.addEventListener('click', () => repayDebt(x.id)); act.appendChild(b); }
+      const del = document.createElement('button'); del.type = 'button'; del.className = 'x'; del.textContent = '×'; del.setAttribute('aria-label', x.name + ' を削除');
+      del.addEventListener('click', () => { if (!confirm(`${x.name} を一覧から消します。よろしいですか？`)) return; state.debts = state.debts.filter((q) => q.id !== x.id); try { saveState(); render(); pushFields({ debts: state.debts }); } catch (err) { showErr(err); } });
+      act.appendChild(del);
+      it.append(nm, am, act); db.appendChild(it);
+    }
 
     const ex = $('extras'); ex.innerHTML = '';
     if (!(state.extras || []).length) { const p = document.createElement('div'); p.className = 'muted'; p.textContent = 'なし'; ex.appendChild(p); }
@@ -892,7 +927,10 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const items = [];
     const daysSince = state.asOf ? Math.floor((now - new Date(state.asOf + 'T00:00:00')) / 86400000) : 99;
     if (daysSince >= 7) items.push({ key: 'update', text: state.asOf ? `カードアプリの数字を更新（${daysSince}日前のまま）` : 'カードアプリの数字を入れる', action: 'go-input', label: '入力へ' });
-    if (num(settings.reserveMonthly) > 0 && c.d >= settings.salaryDay && !todoDone(c.ym, 'reserve')) items.push({ key: 'reserve', text: `触らないお金に ${yen(settings.reserveMonthly)} を足す（給料日）`, action: 'add-reserve', label: '足す', skip: true });
+    const openDebts = (state.debts || []).filter((x) => num(x.balance) > 0);
+    openDebts.forEach((x) => { const key = 'debt:' + x.id; if (todoDone(c.ym, key)) return; if (num(x.monthly) > 0 && num(x.payDay) > 0) { if (c.d >= Math.max(1, num(x.payDay) - 7)) items.push({ key, text: `${x.name} 返済 ${num(x.payDay)}日 ${yen(Math.min(num(x.monthly), num(x.balance)))}（残り ${yen(x.balance)}）`, action: 'repay', label: '返済した', debtId: x.id }); } else items.push({ key: key + ':plan', text: `${x.name} の返済日と毎月の額を決める（残り ${yen(x.balance)}）`, action: 'go-input', label: '入力へ' }); });
+    // 借入が残っている間は積立を保留（金利の高い借入を先に返す）
+    if (!openDebts.length && num(settings.reserveMonthly) > 0 && c.d >= settings.salaryDay && !todoDone(c.ym, 'reserve')) items.push({ key: 'reserve', text: `触らないお金に ${yen(settings.reserveMonthly)} を足す（給料日）`, action: 'add-reserve', label: '足す', skip: true });
     if (state.cardFixedSource === 'estimate' && !c.cardPaid) items.push({ key: 'bill', text: `カードアプリで次回請求額を確認（見込み ${yen(state.cardFixed)}）`, action: 'go-input', label: '入力へ' });
     const open = (state.extras || []).filter((e) => !e.done);
     if (open.length) items.push({ key: 'extras', text: `臨時支出を確定・支払い：${open.map((e) => e.name).join('・')}`, action: 'go-input', label: '入力へ' });
@@ -927,6 +965,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   function todoAction(it) {
     try {
       if (it.action === 'go-input') { showTab('input'); return; }
+      if (it.action === 'repay') { repayDebt(it.debtId); return; }
       if (it.action === 'add-reserve') {
         state.reserve = num(state.reserve) + num(settings.reserveMonthly); markTodo('reserve', true); saveState(); render();
         pushFields({ reserve: state.reserve, todos: state.todos });
@@ -1118,6 +1157,29 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   $('save2').addEventListener('click', () => {
     try { state.reserve = num($('in-reserve').value); state.pay = num($('in-pay').value); formDirty = false; saveState(); render(); pushFields({ reserve: state.reserve }); push('setPay', { pay: state.pay }); showToast('toast2', '保存しました'); }
     catch (e) { showToast('toast2', '保存できませんでした', true); console.error(e); }
+  });
+  function repayDebt(id) {
+    const x = (state.debts || []).find((q) => q.id === id); if (!x) return;
+    const plan = Math.min(num(x.monthly) || num(x.balance), num(x.balance));
+    const ans = prompt(`${x.name} にいくら返済しましたか？（残り ${yen(x.balance)}円）`, String(plan));
+    if (ans === null) return;
+    const amt = Math.min(num(ans), num(x.balance)); if (!amt) return;
+    x.balance = num(x.balance) - amt; markTodo('debt:' + id, true);
+    // 返済は口座から出るお金。残高を入れ直すまでは「口座から直接使った分」として残高から引く
+    const date = ymd(new Date()); const entry = { id: uid(), date, amount: amt, method: 'bank', cat: '返済', memo: `${x.name} 返済`, src: 'manual' };
+    monthDoc(date.slice(0, 7)).spends.push(entry);
+    try { saveState(); saveHist(); render(); pushFields({ debts: state.debts, todos: state.todos }); push('addLog', { entry }); showToast('toast-home', `${x.name} に ${yen(amt)}円 返済。残り ${yen(x.balance)}円`); } catch (e) { showErr(e); }
+  }
+  $('debt-add').addEventListener('click', () => {
+    const name = $('debt-name').value.trim(); const balance = num($('debt-balance').value);
+    if (!name || !balance) { showToast('toast10', '名前と残高を入れてください', true); return; }
+    const monthly = num($('debt-monthly').value); const payDay = Math.min(31, Math.max(0, num($('debt-day').value)));
+    state.debts = state.debts || [];
+    const hit = state.debts.find((q) => q.name === name);
+    if (hit) { hit.balance = balance; if (monthly) hit.monthly = monthly; if (payDay) hit.payDay = payDay; }
+    else state.debts.push({ id: uid(), name, balance, monthly, payDay });
+    ['debt-name', 'debt-balance', 'debt-monthly', 'debt-day'].forEach((k) => { $(k).value = ''; });
+    try { saveState(); render(); pushFields({ debts: state.debts }); showToast('toast10', hit ? '更新しました' : '追加しました'); } catch (e) { showErr(e); }
   });
   $('ex-add').addEventListener('click', () => {
     const name = $('ex-name').value.trim(); const amount = num($('ex-amount').value);
