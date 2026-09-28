@@ -311,13 +311,14 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         <button type="button" class="x" id="install-hint-x" aria-label="閉じる">×</button>
       </div>
       <section class="card hero" aria-labelledby="hero-label">
-        <div class="eyebrow" id="hero-label">使えるお金</div>
+        <div class="eyebrow" id="hero-label">今月の生活費 あと</div>
         <div class="hero-num" id="hero"><span class="yen">¥</span><span id="hero-val">—</span></div>
+        <div class="meter" role="meter" aria-label="今月の生活費" aria-valuemin="0" id="pace-meter"><div class="fill" id="pace-fill" style="width:0%"></div><div class="tick" id="pace-tick" style="left:0%" title="今日の理想位置"></div></div>
+        <div class="hero-next" id="hero-next"></div>
         <div class="hero-foot">
-          <span class="hero-caption">手元と給料から、これから出るお金と、もう使ったお金を引いた残り</span>
+          <span class="hero-caption" id="pace-left">食費・日用品・外食・娯楽など</span>
           <button type="button" class="linkbtn" id="ledger-toggle" aria-expanded="false" aria-controls="ledger" style="white-space:nowrap">内訳を見る</button>
         </div>
-        <div class="hero-next" id="hero-next"></div>
         <div class="hero-foot" id="hero-toast-row" hidden style="justify-content:flex-end">
           <span style="display:flex;align-items:center;gap:8px;min-width:0"><span class="toast" id="toast-home" aria-live="polite"></span><button type="button" class="linkbtn" id="undo" hidden>取り消す</button></span>
         </div>
@@ -331,16 +332,10 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         <div class="timeline" id="check-tl" hidden></div>
       </section>
       <section class="card">
-        <div class="section-title"><span>今月の生活費</span><span class="sub" id="pace-sub"></span></div>
-        <div class="meter-head">
-          <div class="big"><span id="pace-perday">—</span><small>／日</small></div>
-          <div class="muted" id="pace-left"></div>
-        </div>
-        <div class="meter" role="meter" aria-label="今月の生活費" aria-valuemin="0" id="pace-meter"><div class="fill" id="pace-fill" style="width:0%"></div><div class="tick" id="pace-tick" style="left:0%" title="今日の理想位置"></div></div>
-        <div class="meter-legend" id="pace-proj"></div>
-        <div class="section-title" style="margin-top:4px"><span>楽天カード <b id="meter-val" style="font-variant-numeric:tabular-nums"></b><small id="meter-target" class="muted"></small></span><span class="sub" id="meter-left"></span></div>
+        <div class="section-title"><span>楽天カード <b id="meter-val" style="font-variant-numeric:tabular-nums"></b><small id="meter-target" class="muted"></small></span><span class="sub" id="meter-left"></span></div>
         <div class="meter" role="meter" aria-label="今月の楽天カード利用額" aria-valuemin="0" id="meter"><div class="fill" id="meter-fill" style="width:0%"></div></div>
         <div class="meter-legend" id="meter-sub"></div>
+        <div class="meter-legend" id="pace-proj"></div>
       </section>
       <section class="card todo">
         <div class="section-title"><span>今月のやること</span><span class="sub"><span id="todo-sub"></span> <button type="button" class="linkbtn" id="todo-add-toggle" style="font-size:12px;padding:0 0 0 8px">＋追加</button></span></div>
@@ -395,7 +390,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
           <input class="input sm" id="debt-day" inputmode="numeric" placeholder="返済日（1〜31）">
         </div>
         <div class="actions"><button class="btn ghost sm" id="debt-add">追加・更新</button><span class="toast" id="toast10" aria-live="polite"></span></div>
-        <div class="muted">借りたお金は口座に入っていても「使えるお金」から引きます。同じ名前で入れ直すと上書き。返済したら「返済した」で残高が減ります（生活費には数えません）。</div>
+        <div class="muted">借りたお金は口座に入っていても、内訳の「口座全体」の計算では引きます。同じ名前で入れ直すと上書き。返済したら「返済した」で残高が減ります（生活費には数えません）。</div>
       </section>
       <section class="card">
         <div class="row2">
@@ -426,7 +421,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         <div class="section-title"><span>数字の履歴</span><span class="sub">「保存して更新」のたびに1行</span></div>
         <div class="tbl-wrap">
           <table>
-            <thead><tr><th>日付</th><th>口座残高</th><th>次回請求</th><th>今月カード</th><th>使えるお金</th></tr></thead>
+            <thead><tr><th>日付</th><th>口座残高</th><th>次回請求</th><th>今月カード</th><th>月末の余り</th></tr></thead>
             <tbody id="hist-body"></tbody>
           </table>
         </div>
@@ -456,7 +451,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         <div class="actions"><button class="btn ghost sm" id="sub-add">サブスクを追加</button></div>
         <div class="muted">引落日より前なら「まだカードに載っていない予定分」として今月の利用額に上乗せ。当日以降は上乗せしない。</div>
         <div class="actions"><button class="btn" id="save-settings">設定を保存</button><span class="toast" id="toast4" aria-live="polite"></span></div>
-        <div class="formula">使えるお金 ＝ 口座残高 － 口座から直接使った分 ＋（給料日前なら手取り）－ カード次回請求 － カード今月利用額 － 記録したカード利用・チャージ － まだ載っていないサブスク － 家賃（引落前なら）－ 臨時の確定支出 － 借入の残高 － 触らないお金</div>
+        <div class="formula">月末の余り（内訳の参考）＝ 口座残高 － 口座から直接使った分 ＋（給料日前なら手取り）－ カード次回請求 － カード今月利用額 － 記録したカード利用・チャージ － まだ載っていないサブスク － 家賃（引落前なら）－ 臨時の確定支出 － 借入の残高 － 触らないお金</div>
       </section>
       <section class="card">
         <div class="section-title"><span>同期（Googleスプレッドシート）</span><span class="sub" id="sync-state">未接続</span></div>
@@ -554,11 +549,11 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   const md = (date) => date.slice(5).replace('-', '/');
 
   const METHODS = {
-    pay:    { label: '楽天ペイ', badge: 'pay',    effect: '楽天ペイ残高から引きます。使えるお金は変わりません（チャージしたときに引いてあります）' },
-    card:   { label: 'カード',   badge: 'card',   effect: '使えるお金から今すぐ引き、今月のカード利用に足します。QUICPayもこちら' },
-    cash:   { label: '現金',     badge: 'cash',   effect: '記録だけ残します。口座から下ろしたときに口座残高が減っているので、使えるお金は変わりません' },
-    bank:   { label: '口座',     badge: 'bank',   effect: '口座残高から引きます。PayPayチャージやデビットなど、口座からすぐ落ちるもの' },
-    charge: { label: 'チャージ', badge: 'charge', effect: '今月のカード利用に足し、楽天ペイ残高を増やします。使えるお金からは今すぐ引きます' },
+    pay:    { label: '楽天ペイ', badge: 'pay',    effect: '楽天ペイ残高から引きます。生活費は変わりません（チャージしたときに数えてあります）' },
+    card:   { label: 'カード',   badge: 'card',   effect: '生活費の残りから今すぐ引き、今月のカード利用に足します。QUICPayもこちら' },
+    cash:   { label: '現金',     badge: 'cash',   effect: '生活費の残りから引きます。口座から下ろしたときに口座残高が減っているので、口座全体の計算は変わりません' },
+    bank:   { label: '口座',     badge: 'bank',   effect: '生活費の残りと口座残高から引きます。PayPayチャージやデビットなど、口座からすぐ落ちるもの' },
+    charge: { label: 'チャージ', badge: 'charge', effect: '今月のカード利用に足し、楽天ペイ残高を増やします。生活費の残りからは今すぐ引きます' },
   };
   const CARD_LIKE = (m) => m === 'card' || m === 'charge';
 
@@ -703,7 +698,17 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const perDay = daysLeft > 0 ? Math.floor(Math.max(0, livingLeft) / daysLeft) : 0;
     const projLiving = Math.round(livingUsed * daysInMonth / d);
     const projCard = Math.round(cardMonth + (cardLiving / d) * (daysInMonth - d));
-    const pace = { daysInMonth, daysLeft, livingBudget, livingUsed, livingLeft, perDay, cardLiving, cashUsed, bankUsed, elapsed: d / daysInMonth, projLiving, projCard };
+    // 今週（月〜日、月をまたぐ週は月内で切る）の残り。週初めの残りを月末までの日数で割って今週の日数分。使いすぎ・余りは翌週に自然に反映される
+    const dow = (now.getDay() + 6) % 7;
+    const weekStart = Math.max(1, d - dow), weekEnd = Math.min(daysInMonth, d - dow + 6);
+    const dayOf = (r) => Number(String(r.date).slice(8, 10));
+    const livingRows = cardLog.filter((r) => !subs.some((sub) => matchesSub(r, sub)))
+      .concat(monthLog.filter((r) => r.method === 'cash' || (r.method === 'bank' && r.cat !== '返済')));
+    const livingBeforeWeek = (legacyDay && legacyDay <= weekStart ? legacyLiving : 0) + livingRows.filter((r) => dayOf(r) < weekStart).reduce((a, r) => a + num(r.amount), 0);
+    const weekUsed = livingUsed - livingBeforeWeek;
+    const weekBudget = Math.floor(Math.max(0, livingBudget - livingBeforeWeek) * (weekEnd - weekStart + 1) / (daysInMonth - weekStart + 1));
+    const weekLeft = weekBudget - weekUsed;
+    const pace = { daysInMonth, daysLeft, livingBudget, livingUsed, livingLeft, perDay, cardLiving, cashUsed, bankUsed, elapsed: d / daysInMonth, projLiving, projCard, weekStart, weekEnd, weekBudget, weekUsed, weekLeft };
 
     return { d, ym, salaryPaid, rentPaid, cardPaid, lines, available, cardMonth, cardUsedMonth, cardLogCount: cardLog.length, subsExpectedTotal, legacy, bankAfterTotal, extrasTotal, debtTotal, start, timeline, endBalance: run, minRun, minEv, pace };
   }
@@ -719,20 +724,35 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const wd = ['日', '月', '火', '水', '木', '金', '土'][now.getDay()];
     $('today').textContent = `${mm}月${dd}日（${wd}）`;
 
+    // ホームの主役は「今月の生活費の残り」。口座全体の計算（月末の余り）は内訳の下に参考として出す
+    const p = c.pace;
+    const over = p.livingBudget > 0 && p.livingLeft < 0;
     const hero = $('hero');
-    hero.classList.toggle('neg', c.available < 0);
-    hero.classList.toggle('pos', c.available >= 0);
-    $('hero-val').textContent = yen(c.available);
-    $('hero-label').textContent = `${mm}月末まで（あと${c.pace.daysLeft}日）に使えるお金`;
-    const nextMonth = (now.getMonth() + 1) % 12 + 1;
-    const subsAll = (settings.subs || []).reduce((a, s) => a + num(s.amount), 0);
-    const nextEnvelope = num(settings.salary) - num(settings.rent) - subsAll;
+    hero.classList.toggle('neg', over);
+    hero.classList.toggle('pos', !over);
+    $('hero-label').textContent = over ? `${mm}月の生活費 予算オーバー` : `${mm}月の生活費 あと`;
+    $('hero-val').textContent = p.livingBudget ? yen(Math.abs(p.livingLeft)) : '—';
     const hn = $('hero-next');
-    if (!settings.salary) hn.hidden = true;
-    else if (c.available >= 0) { hn.hidden = false; hn.innerHTML = `1日あたり <b>${yen(Math.floor(c.available / Math.max(1, c.pace.daysLeft)))}円</b> まで。${nextMonth}/1 に来月分 <b>+${yen(nextEnvelope)}</b>（給料 − 家賃 − サブスク）が足されます`; }
-    else { hn.hidden = false; hn.innerHTML = `今月分は使い切り。${nextMonth}/1 に来月分 <b>+${yen(nextEnvelope)}</b>（給料 − 家賃 − サブスク）が足されて <b>${yen(c.available + nextEnvelope)}円</b> になる見込み`; }
+    if (!p.livingBudget) { hn.hidden = false; hn.textContent = '「設定」で生活費の月予算を入れてください'; }
+    else if (over) { hn.hidden = false; hn.innerHTML = `今月はあと${p.daysLeft}日。${(now.getMonth() + 1) % 12 + 1}/1 に <b>${yen(p.livingBudget)}円</b> に戻ります`; }
+    else {
+      hn.hidden = false;
+      const wk = p.weekLeft >= 0 ? `今週（〜${p.weekEnd}日）あと <b>${yen(p.weekLeft)}円</b>` : `今週（〜${p.weekEnd}日）<b>${yen(-p.weekLeft)}円</b> 使いすぎ`;
+      hn.innerHTML = `${wk}・1日 <b>${yen(p.perDay)}円</b>`;
+    }
+    $('pace-left').textContent = p.livingBudget ? `使った ${yen(p.livingUsed)} ／ ${yen(p.livingBudget)}` : '食費・日用品・外食・娯楽など';
 
     const lg = $('ledger'); lg.innerHTML = '';
+    // 生活費の内訳
+    const lvRows = [['生活費の月予算', p.livingBudget, +1], ['カード・チャージ（サブスク除く）', p.cardLiving, -1], ['現金', p.cashUsed, -1], ['口座から直接', p.bankUsed, -1]].filter((r, i) => i < 2 || r[1]);
+    { const h = document.createElement('div'); h.className = 'grp'; h.innerHTML = `<span>${mm}月の生活費（食費・日用品・外食・娯楽など。家賃・サブスクは別）</span><span></span>`; lg.appendChild(h); }
+    for (const [name, amt, sign] of lvRows) {
+      const row = document.createElement('div'); row.className = 'row sub';
+      row.innerHTML = `<div class="label"><span class="name">${name}</span></div><div class="amt ${sign > 0 ? 'plus' : 'minus'}">${sign > 0 ? '+' : '−'}${yen(amt)}</div>`;
+      lg.appendChild(row);
+    }
+    { const t = document.createElement('div'); t.className = 'row total'; t.innerHTML = `<div class="label"><span class="name">生活費 ${over ? 'オーバー' : 'あと'}</span></div><div class="amt ${over ? 'minus' : 'plus'}">${yen(Math.abs(p.livingLeft))}</div>`; lg.appendChild(t); }
+    { const h = document.createElement('div'); h.className = 'grp'; h.style.paddingTop = '16px'; h.innerHTML = '<span>参考：口座全体（給料・引落・借入まで入れた月末の余り）</span><span></span>'; lg.appendChild(h); }
     const GROUPS = [['in', '手元と、これから入るお金', +1], ['out', 'これから口座から出るお金', -1], ['used', 'もう使ったお金（次のカード請求など）', -1], ['debt', '借りているお金（返す分）', -1], ['keep', '取り分けておくお金', -1]];
     const GROUP_OF = { balance: 'in', salary: 'in', fixed: 'out', rent: 'out', extras: 'out', bank: 'used', current: 'used', used: 'used', subs: 'used', debt: 'debt', reserve: 'keep' };
     const grouped = GROUPS.map(([g, title, sign]) => ({ g, title, sign, rows: c.lines.filter((l) => (GROUP_OF[l.key] || 'out') === g) })).filter((x) => x.rows.length);
@@ -759,7 +779,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       }
     }
     const tot = document.createElement('div'); tot.className = 'row total';
-    tot.innerHTML = `<div class="label"><span class="name">使えるお金 ＝ 入る − 出る − 使った − 借入 − 取り分け</span></div><div class="amt ${c.available < 0 ? 'minus' : 'plus'}">${yen(c.available)}</div>`;
+    tot.innerHTML = `<div class="label"><span class="name">月末の余り ＝ 入る − 出る − 使った − 借入 − 取り分け</span></div><div class="amt ${c.available < 0 ? 'minus' : 'plus'}">${yen(c.available)}</div>`;
     lg.appendChild(tot);
 
     const hints = $('hero-hints'); hints.innerHTML = '';
@@ -790,20 +810,15 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       tl.appendChild(ev);
     }
 
-    // pace
-    const p = c.pace;
-    $('pace-sub').textContent = `あと${p.daysLeft}日（${mm}月${p.daysInMonth}日まで）`;
-    $('pace-perday').textContent = p.livingBudget ? yen(p.perDay) : '—';
-    $('pace-perday').parentElement.classList.toggle('over', p.livingBudget > 0 && p.livingLeft < 0);
-    $('pace-left').textContent = p.livingBudget ? (p.livingLeft >= 0 ? `使った ${yen(p.livingUsed)}・残り ${yen(p.livingLeft)} ／ ${yen(p.livingBudget)}` : `使った ${yen(p.livingUsed)}・${yen(-p.livingLeft)} 超過 ／ ${yen(p.livingBudget)}`) : '設定で生活費の予算を';
-    const pr = p.livingBudget ? p.livingUsed / p.livingBudget : 0;
+    // 生活費のメーター（残りの割合。縦線は今日の時点で残っていてほしい位置）
+    const rest = p.livingBudget ? Math.max(0, p.livingLeft) / p.livingBudget : 0;
     const pf = $('pace-fill');
-    pf.style.width = Math.min(100, Math.max(0, pr * 100)).toFixed(1) + '%';
-    pf.classList.toggle('warn', pr > p.elapsed + 0.08 && pr < 1);
-    pf.classList.toggle('crit', pr >= 1);
-    $('pace-tick').style.left = (p.elapsed * 100).toFixed(1) + '%';
+    pf.style.width = Math.min(100, rest * 100).toFixed(1) + '%';
+    pf.classList.toggle('warn', rest < 1 - p.elapsed - 0.08 && rest > 0);
+    pf.classList.toggle('crit', over);
+    $('pace-tick').style.left = ((1 - p.elapsed) * 100).toFixed(1) + '%';
     $('pace-meter').setAttribute('aria-valuemax', String(p.livingBudget || 0));
-    $('pace-meter').setAttribute('aria-valuenow', String(p.livingUsed));
+    $('pace-meter').setAttribute('aria-valuenow', String(Math.max(0, p.livingLeft)));
     const signed = (v) => (v >= 0 ? '+' : '−') + yen(Math.abs(v));
     const target0 = num(settings.cardTarget);
     $('pace-proj').textContent = `このペースなら月末：生活費 ${yen(p.projLiving)}${p.livingBudget ? `（予算比 ${signed(p.projLiving - p.livingBudget)}）` : ''}・楽天 ${yen(p.projCard)}${target0 ? `（目標比 ${signed(p.projCard - target0)}）` : ''}`;
@@ -1104,8 +1119,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const label = METHODS[m].label;
     if (m === 'charge') showToast('toast-home', `チャージ ${yen(amount)}円。楽天ペイ残高 ${yen(num(state.pay))}円`);
     else if (m === 'pay') showToast('toast-home', `${label} −${yen(amount)}円。残高 ${yen(num(state.pay))}円`);
-    else if (m === 'cash') showToast('toast-home', `現金 −${yen(amount)}円 を記録`);
-    else showToast('toast-home', `${label} −${yen(amount)}円。使えるお金 ${yen(c.available)}円`);
+    else showToast('toast-home', `${label} −${yen(amount)}円。生活費 ${c.pace.livingLeft < 0 ? 'オーバー ' + yen(-c.pace.livingLeft) : 'あと ' + yen(c.pace.livingLeft)}円`);
   }
   // 直前の記録の取り消し
   let lastRecord = null, undoTimer = null;
@@ -1166,7 +1180,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       saveHist();
       pushFields({ balance: state.balance, cardFixed: state.cardFixed, cardFixedSource: state.cardFixedSource || 'confirmed', asOf: state.asOf, cardCurrent: num(state.cardCurrent), cardCurrentAsOf: state.cardCurrentAsOf || '' });
       push('addEntry', { entry: { date: state.asOf, ...entryRow } });
-      render(); showToast('toast', `保存しました。使えるお金 ${yen(c.available)}円`);
+      render(); showToast('toast', `保存しました。生活費 ${c.pace.livingLeft < 0 ? 'オーバー ' + yen(-c.pace.livingLeft) : 'あと ' + yen(c.pace.livingLeft)}円`);
       if (document.activeElement) document.activeElement.blur();
     } catch (e) { showErr(e); }
   });
@@ -1230,7 +1244,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     catch (e) { showToast(toastId, 'コピーできませんでした', true); }
   }
   $('copy-hist').addEventListener('click', () => {
-    const rows = [['日付', '口座残高', '次回請求', '今月利用', '使えるお金', '今月カード', '触らないお金']];
+    const rows = [['日付', '口座残高', '次回請求', '今月利用', '月末の余り', '今月カード', '触らないお金']];
     for (const ym of Object.keys(hist).sort()) { const ents = hist[ym].entries || {}; for (const date of Object.keys(ents).sort()) { const r = ents[date]; rows.push([date, r.balance, r.cardFixed, r.cardCurrent, r.available, r.cardMonth, r.reserve || 0]); } }
     copyText(rows.map((r) => r.join('\t')).join('\n'), 'toast3');
   });
