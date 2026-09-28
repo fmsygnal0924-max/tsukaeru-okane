@@ -364,19 +364,15 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
             <input class="input" id="in-fixed" inputmode="numeric" autocomplete="off" placeholder="0">
           </div>
           <div class="field">
-            <label for="in-cardapp"><span>カードアプリの今月利用額（任意）</span><span class="tip" id="cardapp-note">ズレを直したいときだけ</span></label>
+            <label for="in-cardapp"><span>楽天カードアプリの今月利用額</span><span class="tip" id="cardapp-note">見たときだけ（答え合わせ用）</span></label>
             <input class="input sm" id="in-cardapp" inputmode="numeric" autocomplete="off" placeholder="入れなくてよい">
-          </div>
-          <div class="field">
-            <label for="in-cardapp-day"><span>↑ に載っている最新の明細は何日？</span><span class="tip">その日以降の記録を上乗せ</span></label>
-            <input class="input sm" id="in-cardapp-day" inputmode="numeric" autocomplete="off" placeholder="例：22">
           </div>
         </div>
         <div class="actions">
           <button class="btn" id="save">保存して更新</button>
           <span class="toast" id="toast" aria-live="polite"></span>
         </div>
-        <div class="muted">カードの利用はメールと「＋使った」の記録から自動で集計します。次回請求額は月替わりに先月の記録合計が見込みとして入るので、月初にカードアプリの確定額に直すだけです。</div>
+        <div class="muted">カードの利用はメールと「＋使った」の記録から自動で集計します。次回請求額は月替わりに先月の記録合計が見込みとして入るので、月初にカードアプリの確定額に直すだけです。楽天カードアプリの今月利用額は答え合わせにだけ使い、Yohaku の数字は変えません。</div>
       </section>
       <section class="card">
         <div class="section-title"><span>臨時の確定支出</span><span class="sub">払ったらチェック</span></div>
@@ -434,6 +430,16 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         </div>
         <div class="actions"><button class="btn ghost sm" id="copy-hist">履歴をコピー（TSV）</button><span class="toast" id="toast3" aria-live="polite"></span></div>
       </section>
+      <section class="card">
+        <div class="section-title"><span>楽天カードとの答え合わせ</span><span class="sub">「入力」で楽天アプリの額を入れたとき</span></div>
+        <div class="tbl-wrap">
+          <table>
+            <thead><tr><th>確認</th><th>楽天</th><th>Yohaku</th><th>差</th><th>判定</th></tr></thead>
+            <tbody id="check-body"></tbody>
+          </table>
+        </div>
+        <div class="muted" id="check-pending"></div>
+      </section>
     </section>
 
     <!-- ===== SETTINGS ===== -->
@@ -449,6 +455,8 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
           <div class="field"><label for="st-cardTarget">楽天カード 月間目標（円）</label><input class="input sm" id="st-cardTarget" inputmode="numeric"></div>
           <div class="field"><label for="st-living">生活費 月予算（円）</label><input class="input sm" id="st-living" inputmode="numeric"></div>
           <div class="field"><label for="st-reserve">毎月の積立（円）</label><input class="input sm" id="st-reserve" inputmode="numeric"></div>
+          <div class="field"><label for="st-checkDiff">楽天との差 警告（円以上）</label><input class="input sm" id="st-checkDiff" inputmode="numeric" placeholder="3,000"></div>
+          <div class="field"><label for="st-checkDays">警告までの日数</label><input class="input sm" id="st-checkDays" inputmode="numeric" placeholder="3"></div>
         </div>
         <div class="muted">積立は給料日以降「今月のやること」に出て、「足す」で触らないお金に加算されます。</div>
         <div class="muted">生活費 ＝ カードの今月利用額 ＋ 記録したカード利用 − 引落済みサブスク ＋ 現金・口座直接の記録。サブスクは含めない。</div>
@@ -565,11 +573,11 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   const CARD_LIKE = (m) => m === 'card' || m === 'charge';
 
   const EMPTY_SETTINGS = { salary: 0, salaryDay: 25, rent: 0, rentDay: 26, cardDay: 27, cardTarget: 0, livingBudget: 70000, reserveMonthly: 15000, subs: [] };
-  const EMPTY_STATE = { balance: 0, cardFixed: 0, cardCurrent: 0, reserve: 0, pay: 0, extras: [], spends: [], debts: [], overrides: {}, todos: { done: {}, custom: [] }, asOf: '', updatedAt: '' };
+  const EMPTY_STATE = { balance: 0, cardFixed: 0, cardCurrent: 0, reserve: 0, pay: 0, extras: [], spends: [], debts: [], overrides: {}, todos: { done: {}, custom: [] }, cardChecks: [], asOf: '', updatedAt: '' };
   let settings = { ...EMPTY_SETTINGS };
   let state = { ...EMPTY_STATE };
   let hist = {};
-  let formDirty = false, settingsDirty = false, fixedDirty = false, cardAppDirty = false;
+  let formDirty = false, settingsDirty = false, fixedDirty = false, cardAppDirty = false, mainDirty = false;
 
   const LS = {
     get(k) { try { const v = localStorage.getItem('yohaku:' + k); if (v !== null) return JSON.parse(v); const old = localStorage.getItem('tsukaeru:' + k); return old ? JSON.parse(old) : null; } catch (e) { return null; } },
@@ -637,6 +645,68 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     try { saveState(); } catch (e) {}
     pushFields({ cardFixed: state.cardFixed, cardFixedSource: 'estimate', cardCurrent: 0, cardCurrentAsOf: '', cycleYm: ym });
   }
+  // ---------- 楽天カードアプリとの答え合わせ ----------
+  // 楽天アプリの「今月利用額」を検算用のチェックポイントとして使う。Yohaku の記録は書き換えない。
+  // 楽天側は同じ日の2件目だけ未反映ということがあるので、日付ではなく取引単位で照合する
+  const CHECK_DIFF = () => (num(settings.cardCheckDiff) > 0 ? num(settings.cardCheckDiff) : 3000);
+  const CHECK_DAYS = () => (num(settings.cardCheckDays) > 0 ? num(settings.cardCheckDays) : 3);
+  // その月のカード・チャージの記録を古い順に。カードアプリの数字を入れていた月（導入月）はその額を起点にする
+  function cardCheckRows(ym) {
+    const legacy = num(state.cardCurrent);
+    const legacyYm = state.cardCurrentAsOf ? state.cardCurrentAsOf.slice(0, 7) : '';
+    const base = legacy > 0 && (!legacyYm || legacyYm === ym) ? legacy : 0;
+    const legacyDay = base && legacyYm === ym ? Number(state.cardCurrentAsOf.slice(8, 10)) : 0;
+    const spends = (hist[ym] && hist[ym].spends) ? hist[ym].spends : [];
+    const rows = spends.map((r, i) => ({ r, i }))
+      .filter(({ r }) => CARD_LIKE(r.method) && !(legacyDay && Number(String(r.date).slice(8, 10)) < legacyDay))
+      .sort((a, b) => String(a.r.date).localeCompare(String(b.r.date)) || String(a.r.createdAt || '').localeCompare(String(b.r.createdAt || '')) || a.i - b.i)
+      .map(({ r }) => r);
+    return { base, rows };
+  }
+  // 楽天の額 amount に一致する「ここまで反映済み」を探す。日付の境目の日だけは、その日の記録のどの組み合わせでもよい
+  // 返り値: exact（一致あり）, matchedId（一致した最後の取引）, matchedTotal, total（Yohaku の合計）, gap（説明できない差 = 楽天 − 一致点）, pending（楽天に未反映の可能性がある記録）
+  function cardCheckMatch(amount, base, rows) {
+    const total = rows.reduce((a, r) => a + num(r.amount), base);
+    const done = (included, pending, exact, matchedTotal) => ({ exact, matchedId: included.length ? String(included[included.length - 1].id) : '', matchedTotal, total, gap: exact ? 0 : amount - matchedTotal, pending, pendingTotal: pending.reduce((a, r) => a + num(r.amount), 0) });
+    if (amount === base) return done([], rows, true, base);
+    let pre = base, best = { s: base, n: 0 };
+    for (let i = 0; i < rows.length;) {
+      let j = i; while (j < rows.length && rows[j].date === rows[i].date) j++;
+      const g = rows.slice(i, j), need = amount - pre;
+      if (g.length <= 14 && need > 0) {
+        for (let m = 1; m < (1 << g.length); m++) {
+          let sum = 0; for (let k = 0; k < g.length; k++) if (m & (1 << k)) sum += num(g[k].amount);
+          if (sum === need) return done(rows.slice(0, i).concat(g.filter((_, k) => m & (1 << k))), g.filter((_, k) => !(m & (1 << k))).concat(rows.slice(j)), true, amount);
+        }
+      }
+      for (let k = i; k < j; k++) { pre += num(rows[k].amount); if (Math.abs(amount - pre) < Math.abs(amount - best.s)) best = { s: pre, n: k + 1 }; }
+      i = j;
+    }
+    return done(rows.slice(0, best.n), rows.slice(best.n), false, best.s);
+  }
+  // 判定: 正常（ぴったり一致）/ 反映待ち（楽天かYohakuの片方が遅れているだけ、または差が小さい）/ 要確認（説明できない差が大きい）
+  function cardCheckStatus(m) {
+    if (m.exact) return m.pendingTotal ? '反映待ち' : '正常';
+    return Math.abs(m.gap) < CHECK_DIFF() ? '反映待ち' : '要確認';
+  }
+  // ホームに出す警告。今月の最新の確認から遡って「説明できない大きな差」が続いている期間を見る。今の記録で照合し直すので、後からメールが届けば自然に消える
+  function cardCheckAlert(now) {
+    const ym = ymOf(now);
+    const checks = (state.cardChecks || []).filter((x) => x.ym === ym);
+    if (!checks.length) return null;
+    const { base, rows } = cardCheckRows(ym);
+    let start = null, gap = 0;
+    for (let i = checks.length - 1; i >= 0; i--) {
+      const m = cardCheckMatch(num(checks[i].amount), base, rows);
+      if (m.exact || Math.abs(m.gap) < CHECK_DIFF()) break;
+      if (i === checks.length - 1) gap = m.gap;
+      start = checks[i];
+    }
+    if (!start) return null;
+    const days = Math.floor((now - new Date(start.at)) / 86400000);
+    return days >= CHECK_DAYS() ? { gap, days } : null;
+  }
+
   function compute(now) {
     const d = now.getDate();
     const ym = ymOf(now);
@@ -800,6 +870,8 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       const days = Math.floor((now - new Date(state.asOf + 'T00:00:00')) / 86400000);
       if (days >= 7) addHint('', `数字の入力から${days}日経っています。「入力」で更新してください。`);
     }
+    const ca = cardCheckAlert(now);
+    if (ca) addHint('', `楽天と${yen(Math.abs(ca.gap))}円の差（${ca.days}日以上一致なし）。履歴で確認`);
 
     // check
     $('check-sub').textContent = `${mm}月の残りの入出金`;
@@ -862,14 +934,14 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     if (!formDirty) {
       $('in-balance').value = state.asOf ? yen(num(state.balance)) : '';
       $('in-fixed').value = (state.asOf || num(state.cardFixed)) ? yen(num(state.cardFixed)) : '';
-      $('in-cardapp').value = num(state.cardCurrent) ? yen(num(state.cardCurrent)) : '';
-      $('in-cardapp-day').value = (num(state.cardCurrent) && state.cardCurrentAsOf) ? String(Number(state.cardCurrentAsOf.slice(8, 10))) : '';
+      $('in-cardapp').value = '';
       $('in-reserve').value = num(state.reserve) ? yen(num(state.reserve)) : '';
       $('in-pay').value = num(state.pay) ? yen(num(state.pay)) : '';
     }
     $('asof-sub').textContent = state.asOf ? `前回 ${md(state.asOf)}` : '未入力';
     $('fixed-note').textContent = c.cardPaid ? `今月分は引落済み。来月分は${(now.getMonth() + 1) % 12 + 1}/1に自動で入る` : (state.cardFixedSource === 'estimate' ? '見込み（記録から）。カードアプリの確定額に直す' : (num(state.cardFixed) ? '確定' : '月初に見込みが自動で入る'));
-    $('cardapp-note').textContent = num(state.cardCurrent) ? `${md(state.cardCurrentAsOf || state.asOf || '')} 以降の記録を上乗せ中` : 'ズレを直したいときだけ';
+    const lastChk = (state.cardChecks || []).slice(-1)[0];
+    $('cardapp-note').textContent = lastChk ? `前回 ${md(lastChk.at.slice(0, 10))} ${yen(lastChk.amount)}・${lastChk.status}` : '見たときだけ（答え合わせ用）';
 
 
     const db = $('debts'); db.innerHTML = '';
@@ -932,6 +1004,26 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       hb.appendChild(tr);
     }
 
+    // 楽天カードとの答え合わせ（保存した時点の結果）。最新の確認だけは今の記録で見直し、未反映の可能性がある記録を出す
+    const cb = $('check-body'); cb.innerHTML = '';
+    const checks = (state.cardChecks || []).slice().reverse();
+    if (!checks.length) cb.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:left">まだありません</td></tr>';
+    for (const x of checks.slice(0, 20)) {
+      const tr = document.createElement('tr'); const t = new Date(x.at);
+      tr.innerHTML = `<td>${t.getMonth() + 1}/${t.getDate()} ${pad2(t.getHours())}:${pad2(t.getMinutes())}</td><td>${yen(x.amount)}</td><td>${yen(x.yohakuTotal)}</td><td>${x.diff ? (x.diff > 0 ? '+' : '−') + yen(Math.abs(x.diff)) : '0'}</td><td class="${x.status === '要確認' ? 'neg' : ''}">${x.status}</td>`;
+      cb.appendChild(tr);
+    }
+    const cp = $('check-pending'); cp.textContent = '';
+    const latest = checks[0];
+    if (latest && latest.ym === ymOf(new Date())) {
+      const cr = cardCheckRows(latest.ym); const cm = cardCheckMatch(num(latest.amount), cr.base, cr.rows);
+      if (cm.exact && cm.pending.length) cp.textContent = `楽天にまだ出ていない可能性：${cm.pending.slice(0, 5).map((r) => `${md(r.date)} ${r.memo || r.merchant || r.cat || 'カード'} ${yen(r.amount)}`).join('、')}${cm.pending.length > 5 ? ` ほか${cm.pending.length - 5}件` : ''}`;
+      else if (!cm.exact && cm.gap > 0) cp.textContent = `楽天の方が ${yen(cm.gap)}円 多い状態です。メールが届いていない利用があるかもしれません。`;
+      else if (!cm.exact && cm.gap < 0) cp.textContent = `Yohaku の方が ${yen(-cm.gap)}円 多い状態です。楽天への反映待ちか、二重の記録かもしれません。`;
+      else if (cm.exact) cp.textContent = '最新の確認は楽天とぴったり一致しています。';
+    }
+    cp.hidden = !cp.textContent;
+
     if (!settingsDirty) fillSettingsForm();
   }
 
@@ -943,6 +1035,8 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     $('st-cardDay').value = settings.cardDay || '';
     $('st-cardTarget').value = settings.cardTarget ? yen(settings.cardTarget) : '';
     $('st-living').value = settings.livingBudget ? yen(settings.livingBudget) : '';
+    $('st-checkDiff').value = settings.cardCheckDiff ? yen(settings.cardCheckDiff) : '';
+    $('st-checkDays').value = settings.cardCheckDays || '';
     $('st-reserve').value = settings.reserveMonthly ? yen(settings.reserveMonthly) : '';
     renderSubs();
   }
@@ -1176,18 +1270,16 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
 
   $('save').addEventListener('click', () => {
     try {
+      // 楽天カードアプリの今月利用額 → 答え合わせの記録だけ残す（Yohaku の数字は変えない）
+      const chkMsg = cardAppDirty && num($('in-cardapp').value) > 0 ? addCardCheck(num($('in-cardapp').value)) : '';
+      cardAppDirty = false; $('in-cardapp').value = '';
+      // 答え合わせだけなら、口座残高の入力日は動かさない
+      if (chkMsg && !mainDirty && state.asOf) { formDirty = false; render(); showToast('toast', chkMsg); if (document.activeElement) document.activeElement.blur(); return; }
+      mainDirty = false;
       state.balance = num($('in-balance').value);
       state.cardFixed = num($('in-fixed').value);
       if (fixedDirty) state.cardFixedSource = 'confirmed';
       fixedDirty = false;
-      // カードアプリの今月利用額を入れ直したら、その日までの記録は含まれている扱いにして、以後の記録だけを上乗せする
-      if (cardAppDirty) {
-        state.cardCurrent = num($('in-cardapp').value);
-        const today = new Date(); const dayIn = num($('in-cardapp-day').value);
-        const day = Math.min(today.getDate(), Math.max(1, dayIn || today.getDate()));
-        state.cardCurrentAsOf = state.cardCurrent ? `${ymOf(today)}-${pad2(day)}` : '';
-      }
-      cardAppDirty = false;
       state.asOf = ymd(new Date());
       formDirty = false;
       saveState();
@@ -1195,16 +1287,29 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       const entryRow = { balance: state.balance, cardFixed: state.cardFixed, cardCurrent: c.cardMonth, available: c.available, cardMonth: c.cardMonth, reserve: num(state.reserve) };
       monthDoc(state.asOf.slice(0, 7)).entries[state.asOf] = entryRow;
       saveHist();
-      pushFields({ balance: state.balance, cardFixed: state.cardFixed, cardFixedSource: state.cardFixedSource || 'confirmed', asOf: state.asOf, cardCurrent: num(state.cardCurrent), cardCurrentAsOf: state.cardCurrentAsOf || '' });
+      pushFields({ balance: state.balance, cardFixed: state.cardFixed, cardFixedSource: state.cardFixedSource || 'confirmed', asOf: state.asOf });
       push('addEntry', { entry: { date: state.asOf, ...entryRow } });
-      render(); showToast('toast', `保存しました。生活費 ${c.pace.livingLeft < 0 ? 'オーバー ' + yen(-c.pace.livingLeft) : 'あと ' + yen(c.pace.livingLeft)}円`);
+      render(); showToast('toast', chkMsg || `保存しました。生活費 ${c.pace.livingLeft < 0 ? 'オーバー ' + yen(-c.pace.livingLeft) : 'あと ' + yen(c.pace.livingLeft)}円`);
       if (document.activeElement) document.activeElement.blur();
     } catch (e) { showErr(e); }
   });
   ['in-balance', 'in-fixed', 'in-cardapp', 'in-reserve', 'in-pay'].forEach((id) => $(id).addEventListener('input', () => { formDirty = true; }));
   $('in-fixed').addEventListener('input', () => { fixedDirty = true; });
-  ['in-cardapp', 'in-cardapp-day'].forEach((id) => $(id).addEventListener('input', () => { cardAppDirty = true; formDirty = true; }));
-  ['in-balance', 'in-fixed', 'in-cardapp', 'in-reserve', 'in-pay', 'ex-amount', 'debt-balance', 'debt-monthly', 'st-salary', 'st-rent', 'st-cardTarget', 'sp-amount'].forEach((id) => $(id).addEventListener('blur', (ev) => { const v = ev.target.value; if (v.trim() !== '') ev.target.value = yen(num(v)); }));
+  $('in-cardapp').addEventListener('input', () => { cardAppDirty = true; formDirty = true; });
+  ['in-balance', 'in-fixed'].forEach((id) => $(id).addEventListener('input', () => { mainDirty = true; }));
+  // 答え合わせを1件残す。返り値は保存後に出す一言
+  function addCardCheck(amount) {
+    const now = new Date(), ym = ymOf(now);
+    const { base, rows } = cardCheckRows(ym);
+    const m = cardCheckMatch(amount, base, rows), status = cardCheckStatus(m);
+    const chk = { id: uid(), at: now.toISOString(), ym, amount, matchedId: m.matchedId, matchedTotal: m.matchedTotal, yohakuTotal: m.total, diff: amount - m.total, gap: m.gap, status };
+    state.cardChecks = (state.cardChecks || []).concat([chk]).slice(-100);
+    saveState(); pushFields({ cardChecks: state.cardChecks });
+    if (status === '正常') return '楽天と一致しました';
+    if (m.exact) return `楽天と一致（まだ楽天に出ていない ${m.pending.length}件 ${yen(m.pendingTotal)}円 は反映待ち）`;
+    return m.gap > 0 ? `楽天の方が ${yen(m.gap)}円 多い。メールが届けば自然に合います` : `Yohaku の方が ${yen(-m.gap)}円 多い。楽天への反映待ちの可能性`;
+  }
+  ['in-balance', 'in-fixed', 'in-cardapp', 'in-reserve', 'in-pay', 'ex-amount', 'debt-balance', 'debt-monthly', 'st-salary', 'st-rent', 'st-cardTarget', 'st-checkDiff', 'sp-amount'].forEach((id) => $(id).addEventListener('blur', (ev) => { const v = ev.target.value; if (v.trim() !== '') ev.target.value = yen(num(v)); }));
   $('save2').addEventListener('click', () => {
     try { state.reserve = num($('in-reserve').value); state.pay = num($('in-pay').value); formDirty = false; saveState(); render(); pushFields({ reserve: state.reserve }); push('setPay', { pay: state.pay }); showToast('toast2', '保存しました'); }
     catch (e) { showToast('toast2', '保存できませんでした', true); console.error(e); }
@@ -1239,7 +1344,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     $('ex-name').value = ''; $('ex-amount').value = '';
     try { saveState(); render(); pushFields({ extras: state.extras }); } catch (e) { showErr(e); }
   });
-  ['st-salary', 'st-salaryDay', 'st-rent', 'st-rentDay', 'st-cardDay', 'st-cardTarget', 'st-living', 'st-reserve'].forEach((id) => $(id).addEventListener('input', () => { settingsDirty = true; }));
+  ['st-salary', 'st-salaryDay', 'st-rent', 'st-rentDay', 'st-cardDay', 'st-cardTarget', 'st-living', 'st-reserve', 'st-checkDiff', 'st-checkDays'].forEach((id) => $(id).addEventListener('input', () => { settingsDirty = true; }));
   $('sub-add').addEventListener('click', () => { settingsDirty = true; settings.subs = settings.subs || []; settings.subs.push({ id: uid(), name: '', amount: 0, day: 1 }); renderSubs(); });
   $('save-settings').addEventListener('click', () => {
     try {
@@ -1251,6 +1356,8 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       settings.cardTarget = num($('st-cardTarget').value);
       settings.livingBudget = num($('st-living').value);
       settings.reserveMonthly = num($('st-reserve').value);
+      settings.cardCheckDiff = num($('st-checkDiff').value) || 3000;
+      settings.cardCheckDays = num($('st-checkDays').value) || 3;
       settings.subs = (settings.subs || []).filter((s) => s.name || s.amount).map((s) => ({ id: s.id || uid(), name: s.name || '', amount: num(s.amount), day: Math.min(31, Math.max(1, num(s.day) || 1)) }));
       settingsDirty = false; saveSettings(); render(); push('saveSettings', { settings }); showToast('toast4', '設定を保存しました');
     } catch (e) { showToast('toast4', '保存できませんでした', true); console.error(e); }
