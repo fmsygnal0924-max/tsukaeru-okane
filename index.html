@@ -365,6 +365,10 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
             <label for="in-cardapp"><span>カードアプリの今月利用額（任意）</span><span class="tip" id="cardapp-note">ズレを直したいときだけ</span></label>
             <input class="input sm" id="in-cardapp" inputmode="numeric" autocomplete="off" placeholder="入れなくてよい">
           </div>
+          <div class="field">
+            <label for="in-cardapp-day"><span>↑ に載っている最新の明細は何日？</span><span class="tip">その日以降の記録を上乗せ</span></label>
+            <input class="input sm" id="in-cardapp-day" inputmode="numeric" autocomplete="off" placeholder="例：22">
+          </div>
         </div>
         <div class="actions">
           <button class="btn" id="save">保存して更新</button>
@@ -622,9 +626,9 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     if (state.cycleYm === ym) return;
     const prevYm = state.cycleYm;
     const legacyDay = (num(state.cardCurrent) > 0 && state.cardCurrentAsOf && state.cardCurrentAsOf.slice(0, 7) === prevYm) ? Number(state.cardCurrentAsOf.slice(8, 10)) : 0;
-    const prevLog = ((hist[prevYm] && hist[prevYm].spends) || []).filter((r) => CARD_LIKE(r.method) && !(legacyDay && Number(String(r.date).slice(8, 10)) <= legacyDay));
+    const prevLog = ((hist[prevYm] && hist[prevYm].spends) || []).filter((r) => CARD_LIKE(r.method) && !(legacyDay && Number(String(r.date).slice(8, 10)) < legacyDay));
     const subs = settings.subs || [];
-    const unmatched = subs.filter((sub) => !prevLog.some((r) => matchesSub(r, sub)) && !(legacyDay && (num(sub.day) || 1) <= legacyDay));
+    const unmatched = subs.filter((sub) => !prevLog.some((r) => matchesSub(r, sub)) && !(legacyDay && (num(sub.day) || 1) < legacyDay));
     const est = num(state.cardCurrent) + prevLog.reduce((a, r) => a + num(r.amount), 0) + unmatched.reduce((a, sub) => a + num(sub.amount), 0);
     state.cardFixed = est; state.cardFixedSource = 'estimate';
     state.cardCurrent = 0; state.cardCurrentAsOf = ''; state.cycleYm = ym;
@@ -642,11 +646,11 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     // メール連動を始める前にカードアプリから入れた今月の利用額（あれば）。その日までの記録はこの数字に含まれている扱い。月替わりで0になる
     const legacy = num(state.cardCurrent);
     const legacyDay = (legacy > 0 && state.cardCurrentAsOf && state.cardCurrentAsOf.slice(0, 7) === ym) ? Number(state.cardCurrentAsOf.slice(8, 10)) : 0;
-    const cardLog = monthLog.filter((r) => CARD_LIKE(r.method) && !(legacyDay && Number(String(r.date).slice(8, 10)) <= legacyDay));
+    const cardLog = monthLog.filter((r) => CARD_LIKE(r.method) && !(legacyDay && Number(String(r.date).slice(8, 10)) < legacyDay));
     const cardUsedMonth = cardLog.reduce((a, r) => a + num(r.amount), 0);
     // サブスク: 今月の記録にまだ無いものは月初から引いておく（カードアプリの数字に含まれている分は除く）
     const subs = settings.subs || [];
-    const subsExpected = subs.filter((sub) => !cardLog.some((r) => matchesSub(r, sub)) && !(legacyDay && (num(sub.day) || 1) <= legacyDay));
+    const subsExpected = subs.filter((sub) => !cardLog.some((r) => matchesSub(r, sub)) && !(legacyDay && (num(sub.day) || 1) < legacyDay));
     const subsExpectedTotal = subsExpected.reduce((a, sub) => a + num(sub.amount), 0);
     const subsMatchedTotal = cardLog.filter((r) => subs.some((sub) => matchesSub(r, sub))).reduce((a, r) => a + num(r.amount), 0);
     const extrasOpen = (state.extras || []).filter((e) => !e.done);
@@ -662,8 +666,8 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     lines.push({ key: 'rent', name: `家賃 ${settings.rentDay}日`, amt: num(settings.rent), sign: -1, skip: rentPaid, toggle: 'rent', paid: rentPaid, note: rentPaid ? '引落済み' : 'これから引落' });
     if (extrasOpen.length) lines.push({ key: 'extras', name: '臨時の確定支出', amt: extrasTotal, sign: -1, note: extrasOpen.map((e) => e.name).join('・') });
     if (bankAfter.length) lines.push({ key: 'bank', name: '口座から直接使った分', amt: bankAfterTotal, sign: -1, note: `残高入力後 ${bankAfter.length}件` });
-    if (legacy > 0) lines.push({ key: 'current', name: 'カードアプリの今月利用額', amt: legacy, sign: -1, note: `${md(state.cardCurrentAsOf || state.asOf || '')} 時点` });
-    lines.push({ key: 'used', name: '今月のカード利用（記録）', amt: cardUsedMonth, sign: -1, note: `${cardLog.length}件` });
+    if (legacy > 0) lines.push({ key: 'current', name: 'カードアプリの今月利用額', amt: legacy, sign: -1, note: `${md(state.cardCurrentAsOf || state.asOf || '')} より前の分` });
+    lines.push({ key: 'used', name: '今月のカード利用（記録）', amt: cardUsedMonth, sign: -1, note: legacyDay ? `${md(state.cardCurrentAsOf)} 以降 ${cardLog.length}件` : `${cardLog.length}件` });
     if (subsExpected.length) lines.push({ key: 'subs', name: 'まだ来ていないサブスク', amt: subsExpectedTotal, sign: -1, note: subsExpected.map((sub) => sub.name).join('・') });
     // 借入: 口座に入っていても自分のお金ではないので引く
     const debts = (state.debts || []).filter((x) => num(x.balance) > 0);
@@ -691,7 +695,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const daysLeft = daysInMonth - d + 1;
     const cashUsed = monthLog.filter((r) => r.method === 'cash').reduce((a, r) => a + num(r.amount), 0);
     const bankUsed = monthLog.filter((r) => r.method === 'bank' && r.cat !== '返済').reduce((a, r) => a + num(r.amount), 0);
-    const legacyLiving = legacyDay ? Math.max(0, legacy - subs.filter((sub) => (num(sub.day) || 1) <= legacyDay).reduce((a, sub) => a + num(sub.amount), 0)) : legacy;
+    const legacyLiving = legacyDay ? Math.max(0, legacy - subs.filter((sub) => (num(sub.day) || 1) < legacyDay).reduce((a, sub) => a + num(sub.amount), 0)) : legacy;
     const cardLiving = legacyLiving + Math.max(0, cardUsedMonth - subsMatchedTotal);
     const livingUsed = cardLiving + cashUsed + bankUsed;
     const livingBudget = num(settings.livingBudget);
@@ -827,12 +831,13 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       $('in-balance').value = state.asOf ? yen(num(state.balance)) : '';
       $('in-fixed').value = (state.asOf || num(state.cardFixed)) ? yen(num(state.cardFixed)) : '';
       $('in-cardapp').value = num(state.cardCurrent) ? yen(num(state.cardCurrent)) : '';
+      $('in-cardapp-day').value = (num(state.cardCurrent) && state.cardCurrentAsOf) ? String(Number(state.cardCurrentAsOf.slice(8, 10))) : '';
       $('in-reserve').value = num(state.reserve) ? yen(num(state.reserve)) : '';
       $('in-pay').value = num(state.pay) ? yen(num(state.pay)) : '';
     }
     $('asof-sub').textContent = state.asOf ? `前回 ${md(state.asOf)}` : '未入力';
     $('fixed-note').textContent = c.cardPaid ? `今月分は引落済み。来月分は${(now.getMonth() + 1) % 12 + 1}/1に自動で入る` : (state.cardFixedSource === 'estimate' ? '見込み（記録から）。カードアプリの確定額に直す' : (num(state.cardFixed) ? '確定' : '月初に見込みが自動で入る'));
-    $('cardapp-note').textContent = num(state.cardCurrent) ? `${md(state.cardCurrentAsOf || state.asOf || '')}時点。以後の記録を上乗せ中` : 'ズレを直したいときだけ';
+    $('cardapp-note').textContent = num(state.cardCurrent) ? `${md(state.cardCurrentAsOf || state.asOf || '')} 以降の記録を上乗せ中` : 'ズレを直したいときだけ';
 
 
     const db = $('debts'); db.innerHTML = '';
@@ -1145,7 +1150,12 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       if (fixedDirty) state.cardFixedSource = 'confirmed';
       fixedDirty = false;
       // カードアプリの今月利用額を入れ直したら、その日までの記録は含まれている扱いにして、以後の記録だけを上乗せする
-      if (cardAppDirty) { state.cardCurrent = num($('in-cardapp').value); state.cardCurrentAsOf = state.cardCurrent ? ymd(new Date()) : ''; }
+      if (cardAppDirty) {
+        state.cardCurrent = num($('in-cardapp').value);
+        const today = new Date(); const dayIn = num($('in-cardapp-day').value);
+        const day = Math.min(today.getDate(), Math.max(1, dayIn || today.getDate()));
+        state.cardCurrentAsOf = state.cardCurrent ? `${ymOf(today)}-${pad2(day)}` : '';
+      }
       cardAppDirty = false;
       state.asOf = ymd(new Date());
       formDirty = false;
@@ -1162,7 +1172,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   });
   ['in-balance', 'in-fixed', 'in-cardapp', 'in-reserve', 'in-pay'].forEach((id) => $(id).addEventListener('input', () => { formDirty = true; }));
   $('in-fixed').addEventListener('input', () => { fixedDirty = true; });
-  $('in-cardapp').addEventListener('input', () => { cardAppDirty = true; });
+  ['in-cardapp', 'in-cardapp-day'].forEach((id) => $(id).addEventListener('input', () => { cardAppDirty = true; formDirty = true; }));
   ['in-balance', 'in-fixed', 'in-cardapp', 'in-reserve', 'in-pay', 'ex-amount', 'debt-balance', 'debt-monthly', 'st-salary', 'st-rent', 'st-cardTarget', 'sp-amount'].forEach((id) => $(id).addEventListener('blur', (ev) => { const v = ev.target.value; if (v.trim() !== '') ev.target.value = yen(num(v)); }));
   $('save2').addEventListener('click', () => {
     try { state.reserve = num($('in-reserve').value); state.pay = num($('in-pay').value); formDirty = false; saveState(); render(); pushFields({ reserve: state.reserve }); push('setPay', { pay: state.pay }); showToast('toast2', '保存しました'); }
@@ -1319,10 +1329,19 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     syncBusy = true; setSyncUI('syncing');
     try {
       let last = null;
-      for (let guard = 0; guard < 200; guard++) {
+      for (let guard = 0; guard < 50; guard++) {
         const q = LS.get('queue') || []; if (!q.length) break;
-        last = await apiPost(q[0].action, q[0].payload);
-        const q2 = LS.get('queue') || []; q2.shift(); LS.set('queue', q2);
+        const n = q.length;
+        const noBatch = Number(LS.get('noBatch') || 0);
+        if (n > 1 && !(noBatch && Date.now() - noBatch < 86400000)) {
+          // たまっている書き込みを1回の通信でまとめて送る
+          try { last = await apiPost('batch', { ops: q.map((x) => ({ action: x.action, payload: x.payload })) }); }
+          catch (e) { if (/unknown action/.test(String(e && e.message))) { LS.set('noBatch', Date.now()); continue; } throw e; }
+          const q2 = LS.get('queue') || []; LS.set('queue', q2.slice(n));
+        } else {
+          last = await apiPost(q[0].action, q[0].payload);
+          const q2 = LS.get('queue') || []; q2.shift(); LS.set('queue', q2);
+        }
       }
       if (last) applyServer(last);
       lastSyncAt = hhmm(); setSyncUI('synced');
