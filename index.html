@@ -361,6 +361,10 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
             <label for="in-fixed"><span>楽天カード 次回請求額</span><span class="tip" id="fixed-note">月初に見込みが自動で入る</span></label>
             <input class="input" id="in-fixed" inputmode="numeric" autocomplete="off" placeholder="0">
           </div>
+          <div class="field">
+            <label for="in-cardapp"><span>カードアプリの今月利用額（任意）</span><span class="tip" id="cardapp-note">ズレを直したいときだけ</span></label>
+            <input class="input sm" id="in-cardapp" inputmode="numeric" autocomplete="off" placeholder="入れなくてよい">
+          </div>
         </div>
         <div class="actions">
           <button class="btn" id="save">保存して更新</button>
@@ -559,7 +563,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   let settings = { ...EMPTY_SETTINGS };
   let state = { ...EMPTY_STATE };
   let hist = {};
-  let formDirty = false, settingsDirty = false, fixedDirty = false;
+  let formDirty = false, settingsDirty = false, fixedDirty = false, cardAppDirty = false;
 
   const LS = {
     get(k) { try { const v = localStorage.getItem('yohaku:' + k); if (v !== null) return JSON.parse(v); const old = localStorage.getItem('tsukaeru:' + k); return old ? JSON.parse(old) : null; } catch (e) { return null; } },
@@ -822,11 +826,13 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     if (!formDirty) {
       $('in-balance').value = state.asOf ? yen(num(state.balance)) : '';
       $('in-fixed').value = (state.asOf || num(state.cardFixed)) ? yen(num(state.cardFixed)) : '';
+      $('in-cardapp').value = num(state.cardCurrent) ? yen(num(state.cardCurrent)) : '';
       $('in-reserve').value = num(state.reserve) ? yen(num(state.reserve)) : '';
       $('in-pay').value = num(state.pay) ? yen(num(state.pay)) : '';
     }
     $('asof-sub').textContent = state.asOf ? `前回 ${md(state.asOf)}` : '未入力';
-    $('fixed-note').textContent = state.cardFixedSource === 'estimate' ? '見込み（記録から）。カードアプリの確定額に直す' : (num(state.cardFixed) ? '確定' : '月初に見込みが自動で入る');
+    $('fixed-note').textContent = c.cardPaid ? `今月分は引落済み。来月分は${(now.getMonth() + 1) % 12 + 1}/1に自動で入る` : (state.cardFixedSource === 'estimate' ? '見込み（記録から）。カードアプリの確定額に直す' : (num(state.cardFixed) ? '確定' : '月初に見込みが自動で入る'));
+    $('cardapp-note').textContent = num(state.cardCurrent) ? `${md(state.cardCurrentAsOf || state.asOf || '')}時点。以後の記録を上乗せ中` : 'ズレを直したいときだけ';
 
 
     const db = $('debts'); db.innerHTML = '';
@@ -1138,6 +1144,9 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       state.cardFixed = num($('in-fixed').value);
       if (fixedDirty) state.cardFixedSource = 'confirmed';
       fixedDirty = false;
+      // カードアプリの今月利用額を入れ直したら、その日までの記録は含まれている扱いにして、以後の記録だけを上乗せする
+      if (cardAppDirty) { state.cardCurrent = num($('in-cardapp').value); state.cardCurrentAsOf = state.cardCurrent ? ymd(new Date()) : ''; }
+      cardAppDirty = false;
       state.asOf = ymd(new Date());
       formDirty = false;
       saveState();
@@ -1145,15 +1154,16 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       const entryRow = { balance: state.balance, cardFixed: state.cardFixed, cardCurrent: c.cardMonth, available: c.available, cardMonth: c.cardMonth, reserve: num(state.reserve) };
       monthDoc(state.asOf.slice(0, 7)).entries[state.asOf] = entryRow;
       saveHist();
-      pushFields({ balance: state.balance, cardFixed: state.cardFixed, cardFixedSource: state.cardFixedSource || 'confirmed', asOf: state.asOf });
+      pushFields({ balance: state.balance, cardFixed: state.cardFixed, cardFixedSource: state.cardFixedSource || 'confirmed', asOf: state.asOf, cardCurrent: num(state.cardCurrent), cardCurrentAsOf: state.cardCurrentAsOf || '' });
       push('addEntry', { entry: { date: state.asOf, ...entryRow } });
       render(); showToast('toast', `保存しました。使えるお金 ${yen(c.available)}円`);
       if (document.activeElement) document.activeElement.blur();
     } catch (e) { showErr(e); }
   });
-  ['in-balance', 'in-fixed', 'in-reserve', 'in-pay'].forEach((id) => $(id).addEventListener('input', () => { formDirty = true; }));
+  ['in-balance', 'in-fixed', 'in-cardapp', 'in-reserve', 'in-pay'].forEach((id) => $(id).addEventListener('input', () => { formDirty = true; }));
   $('in-fixed').addEventListener('input', () => { fixedDirty = true; });
-  ['in-balance', 'in-fixed', 'in-reserve', 'in-pay', 'ex-amount', 'st-salary', 'st-rent', 'st-cardTarget', 'sp-amount'].forEach((id) => $(id).addEventListener('blur', (ev) => { const v = ev.target.value; if (v.trim() !== '') ev.target.value = yen(num(v)); }));
+  $('in-cardapp').addEventListener('input', () => { cardAppDirty = true; });
+  ['in-balance', 'in-fixed', 'in-cardapp', 'in-reserve', 'in-pay', 'ex-amount', 'debt-balance', 'debt-monthly', 'st-salary', 'st-rent', 'st-cardTarget', 'sp-amount'].forEach((id) => $(id).addEventListener('blur', (ev) => { const v = ev.target.value; if (v.trim() !== '') ev.target.value = yen(num(v)); }));
   $('save2').addEventListener('click', () => {
     try { state.reserve = num($('in-reserve').value); state.pay = num($('in-pay').value); formDirty = false; saveState(); render(); pushFields({ reserve: state.reserve }); push('setPay', { pay: state.pay }); showToast('toast2', '保存しました'); }
     catch (e) { showToast('toast2', '保存できませんでした', true); console.error(e); }
