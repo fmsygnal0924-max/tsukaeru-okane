@@ -584,10 +584,13 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   }
 
   // ---------- calculation ----------
+  // サブスク名と、カード明細に出る表記（カタカナや運営会社名）を結びつける
+  const SUB_ALIASES = [['u-next', 'ユーネクスト'], ['chatgpt', 'openai', 'オープンエーアイ'], ['claude', 'anthropic', 'アンスロピック'], ['psn', 'playstation', 'プレイステーション', 'ソニー'], ['google', 'グーグル'], ['icloud', 'apple', 'アップル'], ['amazon prime', 'amazon', 'アマゾン'], ['楽天モバイル', 'ラクテンモバイル'], ['ドコモ', 'docomo']];
+  function subKeys(name) { let keys = [name]; SUB_ALIASES.forEach((g) => { if (g.some((k) => name.includes(k))) keys = keys.concat(g); }); return keys.filter(Boolean); }
   function matchesSub(r, s) {
     const name = String(s.name || '').toLowerCase().trim(); if (!name) return false;
-    const txt = ((r.merchant || '') + ' ' + (r.memo || '')).toLowerCase();
-    if (txt.includes(name)) return true;
+    const txt = ((r.merchant || '') + ' ' + (r.memo || '')).normalize('NFKC').toLowerCase();
+    if (subKeys(name).some((k) => txt.includes(k))) return true;
     return r.cat === 'サブスク' && num(r.amount) === num(s.amount) && num(s.amount) > 0;
   }
   // 月替わり: 先月のカード利用合計を「次回請求（見込み）」にし、今月の利用は0から数える
