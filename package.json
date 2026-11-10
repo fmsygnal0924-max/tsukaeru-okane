@@ -1,0 +1,9 @@
+{
+  "name": "yohaku-checks",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/billing.test.cjs && npm run test:dom",
+    "test:dom": "node tests/dom.test.cjs"
+  },
+  "devDependencies": { "jsdom": "26.1.0" }
+}
