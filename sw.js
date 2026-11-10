@@ -1,8 +1,8 @@
 /* 使えるお金 service worker
    起動を速くするため「キャッシュを先に返し、裏で更新する」方式。
    更新は次回起動時に反映される。 */
-const CACHE = 'tsukaeru-v2';
-const ASSETS = ['./', './index.html', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png'];
+const CACHE = 'yohaku-billing-v3';
+const ASSETS = ['./', './index.html', './billing.js', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting()));
