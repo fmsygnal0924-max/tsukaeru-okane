@@ -62,7 +62,11 @@ const {JSDOM, VirtualConsole}=require('jsdom');
  assert.equal(w.__test.matchesSub({merchant:'AMAZON.CO.JP',amount:600},{id:'prime',name:'Amazon Prime',amount:600}),false);
  assert.equal(w.__test.matchesSub({merchant:'SONY',amount:1990},{id:'ps',name:'PSN',amount:1990}),false);
  let spend=w.__test.spendingSummary('2026-11');assert.equal(spend.subsTotal,1400);assert.equal(spend.otherTotal,5380);assert.equal(spend.total,6780);
- w.__test.render();assert.equal(w.document.querySelector('#subs-actual').textContent,'1,400円');assert.equal(w.document.querySelector('#other-actual').textContent,'5,380円');
+ w.__test.render();assert.equal(w.document.querySelector('#subs-actual').textContent,'2,350円');assert.equal(w.document.querySelector('#other-actual').textContent,'5,380円');
+ // One monthly reservation, then actual linkage replaces it without a second charge.
+ let linked=w.__test.get();linked.state.overrides={...linked.state.overrides,subscriptions:{apple:{type:'subscription',subId:'one'}}};await set(linked);w.__test.render();assert.equal(w.document.querySelector('#subs-actual').textContent,'1,550円');
+ assert.equal(w.document.querySelector('#subs-pending'),null);
+ const groups=[...w.document.querySelectorAll('details.input-group')];assert.equal(groups.length,4);assert(groups.every(g=>!g.open));w.document.getElementById('payment-edit').click();assert.equal(groups[0].open,true);
  // Explicit future bill confirmation, not a comparison checkpoint, updates the statement.
  w.document.getElementById('check-month').value='2027-01';w.document.getElementById('check-basis').value='billing';w.document.getElementById('check-confirmed').checked=true;
  chk.value='12345';chk.dispatchEvent(new w.Event('input',{bubbles:true}));w.document.getElementById('save').click();assert.equal(w.__test.get().state.overrides.billing.statements['2027-01'].amount,12345);

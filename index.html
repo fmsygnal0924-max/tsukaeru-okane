@@ -356,6 +356,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         <button type="button" class="x" id="install-hint-x" aria-label="閉じる">×</button>
       </div>
       <section class="card hero" aria-labelledby="hero-label">
+        <p class="muted">生活費予算の残り。口座残高ではありません。楽天ペイはカードチャージ額を支出の近似として含みます。</p>
         <div class="hero-foot"><div class="eyebrow" id="hero-label">今月の生活費 あと</div><span class="hero-caption" id="pace-left">食費・日用品・外食・娯楽など</span></div>
         <div class="hero-foot" style="align-items:flex-end">
           <div class="hero-num" id="hero"><span class="yen" id="hero-yen">¥</span><span id="hero-val">—</span><span class="unit" id="hero-unit" hidden></span></div>
@@ -371,15 +372,12 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         <div id="hero-hints" style="display:flex;flex-direction:column;gap:6px"></div>
       </section>
       <section class="card spending-card">
-        <div class="section-title"><span id="spending-title">今月のカード利用</span><span class="status-pill">記録済み</span></div>
+        <div class="section-title"><span id="spending-title">今月のお金の使い方</span></div>
         <div class="spending-grid">
-          <div class="spending-tile"><span class="tile-label">サブスク</span><strong id="subs-actual">—</strong><span class="tile-note">記録された定期支払い</span></div>
-          <div class="spending-tile other"><span class="tile-label">それ以外</span><strong id="other-actual">—</strong><span class="tile-note">買い物・チャージなど</span></div>
+          <div class="spending-tile"><span class="tile-label">サブスク・通信費</span><strong id="subs-actual">—</strong><span class="tile-note">今月分を先に確保・生活費とは別</span></div>
+          <div class="spending-tile other"><span class="tile-label">カードで使った生活費</span><strong id="other-actual">—</strong><span class="tile-note">買い物・チャージなど</span></div>
         </div>
-        <div class="total-strip"><span>記録済みの合計</span><strong id="actual-total">—</strong></div>
         <p class="muted" id="spending-note"></p>
-        <div class="forecast-strip"><span>まだ記録のないサブスク予定</span><strong id="subs-pending">—</strong></div>
-        <p class="muted">予定は実績と別です。未確定の円額は直近実績などからの仮見込み。明細が届くと予定を実績へ置き換えます。</p>
         <button type="button" class="linkbtn" id="spending-detail">利用の内訳を見る →</button>
       </section>
       <section class="card payment-card">
@@ -396,8 +394,9 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
 
     <!-- ===== INPUT ===== -->
     <section class="tab" data-tab="input" hidden>
-      <section class="card">
-        <div class="section-title"><span>楽天アプリを見ながら入力</span><span class="sub" id="asof-sub"></span></div>
+      <p class="muted">変更したい項目だけ開いてください。メール取込は支出記録の補助です。口座残高・楽天キャッシュ・カード請求額の定期確認は自動ではありません。</p>
+      <details class="card disclosure input-group">
+        <summary>口座残高・カード請求を更新 <span class="sub" id="asof-sub"></span></summary>
         <div class="fields">
           <div class="field">
             <label for="in-balance"><span>銀行口座の残高</span><span class="tip">残高を確認したときだけ更新</span></label>
@@ -419,18 +418,18 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
           <span class="toast" id="toast" aria-live="polite"></span>
         </div>
         <div class="muted">「使った月」と「払う月」は違います。月末の利用は、お店からの売上情報が届く時期で翌月以降の支払いに回ることがあります。楽天アプリの支払い月を優先し、記録を二重に追加しません。</div>
-      </section>
-      <section class="card">
-        <div class="section-title"><span>臨時の確定支出</span><span class="sub">払ったらチェック</span></div>
+      </details>
+      <details class="card disclosure input-group">
+        <summary>臨時の支払い予定を追加・確認</summary>
         <div class="list" id="extras"></div>
         <div class="row2">
           <input class="input sm txt" id="ex-name" placeholder="名前（例：Wi-Fi未払い）">
           <input class="input sm" id="ex-amount" inputmode="numeric" placeholder="金額">
         </div>
         <div class="actions"><button class="btn ghost sm" id="ex-add">追加</button><span class="muted">カードの利用額に載ったら、チェック済みにして二重計上を防ぐ</span></div>
-      </section>
-      <section class="card">
-        <div class="section-title"><span>借入（返すお金）</span><span class="sub" id="debt-sub"></span></div>
+      </details>
+      <details class="card disclosure input-group">
+        <summary>借入・返済を更新 <span class="sub" id="debt-sub"></span></summary>
         <div class="list" id="debts"></div>
         <div class="row2">
           <input class="input sm txt" id="debt-name" placeholder="名前（例：アコム）" autocomplete="off">
@@ -440,8 +439,9 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         </div>
         <div class="actions"><button class="btn ghost sm" id="debt-add">追加・更新</button><span class="toast" id="toast10" aria-live="polite"></span></div>
         <div class="muted">借りたお金は口座に入っていても、内訳の「全部払ったあとの残り」では引きます。同じ名前で入れ直すと上書き。返済したら「返済した」で残高が減ります（生活費には数えません）。</div>
-      </section>
-      <section class="card">
+      </details>
+      <details class="card disclosure input-group">
+        <summary>楽天キャッシュ・保管資金の残高を更新</summary>
         <div class="row2">
           <div class="field">
             <label for="in-reserve"><span>触らないお金</span></label>
@@ -455,7 +455,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
           </div>
         </div>
         <div class="actions"><button class="btn ghost sm" id="save2">この2つを保存</button><span class="toast" id="toast2" aria-live="polite"></span></div>
-      </section>
+      </details>
     </section>
 
     <!-- ===== HISTORY ===== -->
@@ -465,7 +465,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         <label for="usage-month">使った月</label><input class="input sm" id="usage-month" type="month">
         <div class="summary-box" id="usage-summary"></div>
         <div class="list" id="usage-detail"></div>
-        <details class="disclosure"><summary>未記録のサブスク予定</summary><div class="list" id="pending-subs-list"></div><p class="muted">設定にある予定です。店名不明・合算請求は照合できず、実績と重なることがあります。解約したものは「設定」で見直してください。</p></details>
+        <details class="disclosure"><summary>サブスク・通信費の内訳</summary><div class="list" id="pending-subs-list"></div><p class="muted">毎月分を先に含め、明細が届いた分は置き換えます。未照合の請求は重複する可能性があるため確認が必要です。契約の変更は「設定」から。</p></details>
       </section>
       <section class="card">
         <div class="section-title"><span>引落チェック</span><span class="sub" id="check-sub"></span></div>
@@ -527,7 +527,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
           <div class="field"><label for="st-rentDay">家賃引落日</label><input class="input sm" id="st-rentDay" inputmode="numeric"></div>
           <div class="field"><label for="st-cardDay">楽天カード引落日</label><input class="input sm" id="st-cardDay" inputmode="numeric"></div>
           <div class="field"><label for="st-cardTarget">楽天カード 月間目標（円）</label><input class="input sm" id="st-cardTarget" inputmode="numeric"></div>
-          <div class="field"><label for="st-living">月予算（サブスク確保前・円）</label><input class="input sm" id="st-living" inputmode="numeric"></div>
+          <div class="field"><label for="st-living">生活費の月予算（家賃・サブスク別・円）</label><input class="input sm" id="st-living" inputmode="numeric"></div>
           <div class="field"><label for="st-reserve">毎月の積立（円）</label><input class="input sm" id="st-reserve" inputmode="numeric"></div>
           <div class="field"><label for="st-checkDiff">楽天との差 警告（円以上）</label><input class="input sm" id="st-checkDiff" inputmode="numeric" placeholder="3,000"></div>
           <div class="field"><label for="st-checkDays">警告までの日数</label><input class="input sm" id="st-checkDays" inputmode="numeric" placeholder="3"></div>
@@ -545,7 +545,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       <section class="card">
         <div class="section-title"><span>同期（Googleスプレッドシート）</span><span class="sub" id="sync-state">未接続</span></div>
         <div id="sync-form">
-          <div class="muted">スプレッドシートに保存すると、楽天のメール（楽天ペイ・チャージ・カード利用）から自動で記録され、iPhoneを替えてもデータが残ります。設定手順は Drive の「Yohaku同期／設定手順.txt」。</div>
+          <div class="muted">スプレッドシートに保存すると、届いた楽天のメール（チャージ・カード利用など）から記録され、iPhoneを替えてもデータが残ります。設定手順は Drive の「Yohaku同期／設定手順.txt」。</div>
           <div class="field" style="margin-top:8px"><label for="sync-url">ウェブアプリのURL（/exec で終わる）</label><input class="input sm txt" id="sync-url" placeholder="https://script.google.com/macros/s/…/exec" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
           <div class="field" style="margin-top:8px"><label for="sync-key">合言葉（key）</label><input class="input sm txt" id="sync-key" placeholder="kv シートの info 行にある文字列" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
           <div class="actions" style="margin-top:8px"><button class="btn sm" id="sync-connect">接続する</button><span class="toast" id="toast8" aria-live="polite"></span></div>
@@ -1043,12 +1043,10 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     $('pace-proj').innerHTML = `<span class="h">月末見込み</span>${projRow('生活費', p.projLiving, p.livingBudget, '予算')}<span></span>${projRow('楽天', p.projCard, target0, '目標')}`;
 
     const spend = spendingSummary(c.ym), nextYm = Billing.shiftMonth(c.ym, 1), nextBill = billSummary(nextYm);
-    $('spending-title').textContent = `${mm}月に使ったカード分`;
-    $('subs-actual').textContent = yen(spend.subsTotal) + '円';
+    $('spending-title').textContent = `${mm}月のお金の使い方`;
+    $('subs-actual').textContent = yen(spend.subsTotal + c.subsExpectedTotal) + '円';
     $('other-actual').textContent = yen(spend.otherTotal) + '円';
-    $('actual-total').textContent = yen(spend.total) + '円';
-    $('subs-pending').textContent = yen(c.subsExpectedTotal) + '円';
-    $('spending-note').textContent = '利用日で集計。店名未確認の利用は「それ以外」に含みます。' + (spend.base ? ` 分類できない旧集計 ${yen(spend.base)}円も合計に含みます。` : '');
+    $('spending-note').textContent = 'サブスクは今月分をまとめた確保目安。為替・契約未確認分を含みます。生活費の7万円からは再び引きません。' + (spend.base ? ` 分類できない旧集計 ${yen(spend.base)}円も合計に含みます。` : '');
     $('home-fixed-label').textContent = `${mm}月に払う分`;
     $('home-fixed').textContent = yen(state.cardFixed) + '円';
     $('home-fixed-note').textContent = c.cardPaid ? '引落済み' : state.cardFixedSource === 'estimate' ? '記録からの見込み' : '本人入力の支払い額・ポイント差引後';
@@ -1208,11 +1206,11 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     }
     if(!u.rows.length)root.textContent='この月の記録はまだありません。';
     const box=$('pending-subs-list');box.innerHTML='';
-    for(const sub of missingSubs(ym)){const row=document.createElement('div');row.className='transaction-row';const n=document.createElement('span');n.textContent=sub.name;const a=document.createElement('strong');a.textContent=yen(sub.amount)+'円'+(sub.amountBasis==='fixed'?'':'（仮見込み）');row.append(n,a);box.appendChild(row);}
+    for(const sub of scheduledSubs(ym)){const matched=u.subs.filter(r=>matchesSub(r,sub));const amount=matched.length?matched.reduce((v,r)=>v+num(r.amount),0):num(sub.amount);const row=document.createElement('div');row.className='transaction-row';const n=document.createElement('span');n.textContent=sub.name;const a=document.createElement('strong');a.textContent=yen(amount)+'円'+(matched.length?'（明細確認）':sub.receiptVerified?.date?.startsWith(ym)?'（領収書確認）':sub.amountBasis==='fixed'?'（月額）':'（目安）');row.append(n,a);box.appendChild(row);}
   }
   $('usage-month').addEventListener('change',renderUsageDetail);
   $('spending-detail').addEventListener('click',()=>{showTab('history');$('usage-detail-card').scrollIntoView({block:'start'});});
-  $('payment-edit').addEventListener('click',()=>showTab('input'));
+  $('payment-edit').addEventListener('click',()=>{showTab('input');document.querySelector('.input-group').open=true;});
   $('check-basis').addEventListener('change',()=>{ $('check-confirmed').checked=false;$('check-confirmed').disabled=$('check-basis').value!=='billing'; });
 
   function renderBilling() {
@@ -1725,7 +1723,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   function renderSyncUI() {
     const cfg = getSync();
     $('sync-form').hidden = !!cfg; $('sync-connected').hidden = !cfg;
-    if (cfg) { const tail = cfg.url.replace(/^https:\/\/script\.google\.com\/macros\/s\//, '').slice(0, 10); $('sync-info').textContent = `接続先: script.google.com/…/${tail}…/exec。楽天のメールは5分おきに自動で読み込まれます。`; }
+    if (cfg) { const tail = cfg.url.replace(/^https:\/\/script\.google\.com\/macros\/s\//, '').slice(0, 10); $('sync-info').textContent = `接続先: script.google.com/…/${tail}…/exec。メール取込の設定があります。カードサイトの定期閲覧とは別です。楽天ペイの支払い通知は停止中です。`; }
     else { $('sync-url').value = ''; $('sync-key').value = ''; }
   }
   $('sync-connect').addEventListener('click', async () => {
