@@ -379,7 +379,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         <div class="total-strip"><span>記録済みの合計</span><strong id="actual-total">—</strong></div>
         <p class="muted" id="spending-note"></p>
         <div class="forecast-strip"><span>まだ記録のないサブスク予定</span><strong id="subs-pending">—</strong></div>
-        <p class="muted">予定額は上の実績に含めません。設定が古い場合や店名不明の利用は、内訳で確認できます。</p>
+        <p class="muted">予定は実績と別です。未確定の円額は直近実績などからの仮見込み。明細が届くと予定を実績へ置き換えます。</p>
         <button type="button" class="linkbtn" id="spending-detail">利用の内訳を見る →</button>
       </section>
       <section class="card payment-card">
@@ -527,7 +527,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
           <div class="field"><label for="st-rentDay">家賃引落日</label><input class="input sm" id="st-rentDay" inputmode="numeric"></div>
           <div class="field"><label for="st-cardDay">楽天カード引落日</label><input class="input sm" id="st-cardDay" inputmode="numeric"></div>
           <div class="field"><label for="st-cardTarget">楽天カード 月間目標（円）</label><input class="input sm" id="st-cardTarget" inputmode="numeric"></div>
-          <div class="field"><label for="st-living">生活費 月予算（円）</label><input class="input sm" id="st-living" inputmode="numeric"></div>
+          <div class="field"><label for="st-living">月予算（サブスク確保前・円）</label><input class="input sm" id="st-living" inputmode="numeric"></div>
           <div class="field"><label for="st-reserve">毎月の積立（円）</label><input class="input sm" id="st-reserve" inputmode="numeric"></div>
           <div class="field"><label for="st-checkDiff">楽天との差 警告（円以上）</label><input class="input sm" id="st-checkDiff" inputmode="numeric" placeholder="3,000"></div>
           <div class="field"><label for="st-checkDays">警告までの日数</label><input class="input sm" id="st-checkDays" inputmode="numeric" placeholder="3"></div>
@@ -696,6 +696,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   function matchesSub(r, s) {
     const link = state.overrides?.subscriptions?.[String(r.id)];
     if (link) return link.type === 'subscription' && link.subId === s.id;
+    if (s.monthlyMatchExact && num(r.amount) !== num(s.amount)) return false;
     const name = normalized(s.name), txt = normalized((r.merchant || '') + ' ' + (r.memo || ''));
     if (!name) return false;
     const group = SUB_ALIASES.find((g) => g.some((k) => name.includes(normalized(k))));
@@ -706,7 +707,10 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   function isSubscription(r) {
     const link = state.overrides?.subscriptions?.[String(r.id)];
     if (link) return link.type === 'subscription';
-    return r.cat === 'サブスク' || (settings.subs || []).some((s) => matchesSub(r, s));
+    const subs = settings.subs || [];
+    if (subs.some(s => matchesSub(r,s))) return true;
+    if (subs.some(s => s.monthlyMatchExact && matchesSub(r,{...s,monthlyMatchExact:false}))) return false;
+    return r.cat === 'サブスク';
   }
   function spendingSummary(ym) {
     const u = utilizationRows(ym);
@@ -730,9 +734,12 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const rows = allLog().filter((r) => CARD_LIKE(r.method) && String(r.date).slice(0, 7) === ym && !(base && asOf && String(r.date) < asOf));
     return { base, asOf, rows };
   }
+  function scheduledSubs(ym) {
+    return (settings.subs || []).filter(s => { const due = ym + '-' + String(num(s.day)||1).padStart(2,'0'); return s.endedOn ? due < s.endedOn : s.active !== false; });
+  }
   function missingSubs(ym) {
     const u = utilizationRows(ym);
-    return (settings.subs || []).filter((sub) => !u.rows.some((r) => matchesSub(r, sub)) && !(u.base && u.asOf && (num(sub.day) || 1) < Number(u.asOf.slice(8, 10))));
+    return scheduledSubs(ym).filter((sub) => !u.rows.some((r) => matchesSub(r, sub)) && !(u.base && u.asOf && (num(sub.day) || 1) < Number(u.asOf.slice(8, 10))));
   }
   function billSummary(ym, withForecast = true) {
     const b = billingMeta(), prev = Billing.shiftMonth(ym, -1), u = utilizationRows(prev);
@@ -837,7 +844,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const cardUsedMonth = cardLog.reduce((a, r) => a + num(r.amount), 0);
     // サブスク: 今月の記録にまだ無いものは月初から引いておく（カードアプリの数字に含まれている分は除く）
     const subs = settings.subs || [];
-    const subsExpected = subs.filter((sub) => !cardLog.some((r) => matchesSub(r, sub)) && !(legacyDay && (num(sub.day) || 1) < legacyDay));
+    const subsExpected = scheduledSubs(ym).filter((sub) => !cardLog.some((r) => matchesSub(r, sub)) && !(legacyDay && (num(sub.day) || 1) < legacyDay));
     const subsExpectedTotal = subsExpected.reduce((a, sub) => a + num(sub.amount), 0);
     const subsMatchedTotal = cardLog.filter(isSubscription).reduce((a, r) => a + num(r.amount), 0);
     const extrasOpen = (state.extras || []).filter((e) => !e.done);
@@ -892,9 +899,10 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const cardLiving = legacyLiving + Math.max(0, cardUsedMonth - subsMatchedTotal);
     const livingUsed = cardLiving + cashUsed + bankUsed;
     const livingBudget = num(settings.livingBudget);
-    const livingLeft = livingBudget - livingUsed;
+    const subsReserved = settings.reserveSubsInBudget ? subsMatchedTotal + subsExpectedTotal : 0;
+    const livingLeft = livingBudget - livingUsed - subsReserved;
     const perDay = daysLeft > 0 ? Math.floor(Math.max(0, livingLeft) / daysLeft) : 0;
-    const projLiving = Math.round(livingUsed * daysInMonth / d);
+    const projLiving = Math.round(livingUsed * daysInMonth / d) + subsReserved;
     const projCard = Math.round(cardMonth + (cardLiving / d) * (daysInMonth - d));
     // 今週（月〜日、月をまたぐ週は月内で切る）の残り。週初めの残りを月末までの日数で割って今週の日数分。使いすぎ・余りは翌週に自然に反映される
     const dow = (now.getDay() + 6) % 7;
@@ -904,9 +912,9 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       .concat(monthLog.filter((r) => r.method === 'cash' || (r.method === 'bank' && r.cat !== '返済')));
     const livingBeforeWeek = (legacyDay && legacyDay <= weekStart ? legacyLiving : 0) + livingRows.filter((r) => dayOf(r) < weekStart).reduce((a, r) => a + num(r.amount), 0);
     const weekUsed = livingUsed - livingBeforeWeek;
-    const weekBudget = Math.floor(Math.max(0, livingBudget - livingBeforeWeek) * (weekEnd - weekStart + 1) / (daysInMonth - weekStart + 1));
+    const weekBudget = Math.floor(Math.max(0, livingBudget - subsReserved - livingBeforeWeek) * (weekEnd - weekStart + 1) / (daysInMonth - weekStart + 1));
     const weekLeft = weekBudget - weekUsed;
-    const pace = { daysInMonth, daysLeft, livingBudget, livingUsed, livingLeft, perDay, cardLiving, cashUsed, bankUsed, elapsed: d / daysInMonth, projLiving, projCard, weekStart, weekEnd, weekBudget, weekUsed, weekLeft };
+    const pace = { subsReserved, daysInMonth, daysLeft, livingBudget, livingUsed, livingLeft, perDay, cardLiving, cashUsed, bankUsed, elapsed: d / daysInMonth, projLiving, projCard, weekStart, weekEnd, weekBudget, weekUsed, weekLeft };
 
     return { d, ym, salaryPaid, rentPaid, cardPaid, lines, available, cardMonth, cardUsedMonth, cardLogCount: cardLog.length, subsExpectedTotal, legacy, bankAfterTotal, extrasTotal, debtTotal, start, timeline, endBalance: run, minRun, minEv, pace, futureBills };
   }
@@ -929,24 +937,24 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     hero.classList.toggle('neg', over);
     hero.classList.toggle('pos', !over);
     // オーバー時は「¥」を外して「○円 オーバー」と書く（残りと読み違えないように）
-    $('hero-label').textContent = over ? `${mm}月の生活費` : `${mm}月の生活費 あと`;
+    $('hero-label').textContent = settings.reserveSubsInBudget ? `${mm}月の予算 あと（サブスク確保後）` : over ? `${mm}月の生活費` : `${mm}月の生活費 あと`;
     $('hero-val').textContent = p.livingBudget ? yen(Math.abs(p.livingLeft)) : '—';
     $('hero-yen').hidden = over;
     $('hero-unit').hidden = !over; $('hero-unit').textContent = '円 オーバー';
     const hn = $('hero-next');
     if (!p.livingBudget) { hn.hidden = false; hn.textContent = '「設定」で生活費の月予算を入れてください'; }
-    else if (over) { hn.hidden = false; hn.innerHTML = `今月はあと${p.daysLeft}日。${(now.getMonth() + 1) % 12 + 1}/1 に <b>${yen(p.livingBudget)}円</b> に戻ります`; }
+    else if (over) { hn.hidden = false; hn.innerHTML = `今月はあと${p.daysLeft}日。${(now.getMonth() + 1) % 12 + 1}/1 に月予算を更新し、翌月分のサブスクを先に確保します`; }
     else {
       hn.hidden = false;
       const wk = p.weekLeft >= 0 ? `今週（〜${p.weekEnd}日）あと <b>${yen(p.weekLeft)}円</b>` : `今週（〜${p.weekEnd}日）<b>${yen(-p.weekLeft)}円</b> 使いすぎ`;
       hn.innerHTML = `${wk} ｜ 月末まで <b>${yen(p.perDay)}円</b>/日`;
     }
-    $('pace-left').textContent = p.livingBudget ? `使った ${yen(p.livingUsed)} ／ ${yen(p.livingBudget)}` : '食費・日用品・外食・娯楽など';
+    $('pace-left').textContent = p.livingBudget ? `使った ${yen(p.livingUsed)}${p.subsReserved ? ' ＋ サブスク確保 ' + yen(p.subsReserved) : ''} ／ ${yen(p.livingBudget)}` : '食費・日用品・外食・娯楽など';
 
     const lg = $('ledger'); lg.innerHTML = '';
     // 生活費の内訳
-    const lvRows = [['生活費の月予算', p.livingBudget, +1], ['カード・チャージ（サブスク除く）', p.cardLiving, -1], ['現金', p.cashUsed, -1], ['口座から直接', p.bankUsed, -1]].filter((r, i) => i < 2 || r[1]);
-    { const h = document.createElement('div'); h.className = 'grp'; h.innerHTML = `<span>${mm}月の生活費（食費・日用品・外食・娯楽など。家賃・サブスクは別）</span><span></span>`; lg.appendChild(h); }
+    const lvRows = [['月予算', p.livingBudget, +1], ['サブスク確保（実績＋未記録予定）', p.subsReserved, -1], ['カード・チャージ（サブスク除く）', p.cardLiving, -1], ['現金', p.cashUsed, -1], ['口座から直接', p.bankUsed, -1]].filter((r, i) => i < 2 || r[1]);
+    { const h = document.createElement('div'); h.className = 'grp'; h.innerHTML = `<span>${mm}月の予算内訳（家賃は別。サブスクは確保欄で一度だけ控除）</span><span></span>`; lg.appendChild(h); }
     for (const [name, amt, sign] of lvRows) {
       const row = document.createElement('div'); row.className = 'row sub';
       row.innerHTML = `<div class="label"><span class="name">${name}</span></div><div class="amt ${sign > 0 ? 'plus' : 'minus'}">${sign > 0 ? '+' : '−'}${yen(amt)}</div>`;
@@ -1200,7 +1208,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     }
     if(!u.rows.length)root.textContent='この月の記録はまだありません。';
     const box=$('pending-subs-list');box.innerHTML='';
-    for(const sub of missingSubs(ym)){const row=document.createElement('div');row.className='transaction-row';const n=document.createElement('span');n.textContent=sub.name;const a=document.createElement('strong');a.textContent=yen(sub.amount)+'円';row.append(n,a);box.appendChild(row);}
+    for(const sub of missingSubs(ym)){const row=document.createElement('div');row.className='transaction-row';const n=document.createElement('span');n.textContent=sub.name;const a=document.createElement('strong');a.textContent=yen(sub.amount)+'円'+(sub.amountBasis==='fixed'?'':'（仮見込み）');row.append(n,a);box.appendChild(row);}
   }
   $('usage-month').addEventListener('change',renderUsageDetail);
   $('spending-detail').addEventListener('click',()=>{showTab('history');$('usage-detail-card').scrollIntoView({block:'start'});});
@@ -1258,14 +1266,14 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       const a = document.createElement('input'); a.className = 'input'; a.inputMode = 'numeric'; a.value = s.amount ? yen(s.amount) : ''; a.placeholder = '金額'; a.id = 'sub-a-' + s.id; a.setAttribute('aria-label', '金額');
       const d = document.createElement('input'); d.className = 'input'; d.inputMode = 'numeric'; d.value = s.day || ''; d.placeholder = '日'; d.id = 'sub-d-' + s.id; d.setAttribute('aria-label', '引落日');
       const x = document.createElement('button'); x.type = 'button'; x.className = 'x'; x.textContent = '×'; x.setAttribute('aria-label', (s.name || 'サブスク') + ' を削除');
-      [n, a, d].forEach((el) => el.addEventListener('input', () => { settingsDirty = true; s.name = n.value; s.amount = num(a.value); s.day = Math.min(31, Math.max(1, num(d.value) || 1)); updateSubsTotal(); }));
+      [n, a, d].forEach((el) => el.addEventListener('input', () => { settingsDirty = true; s.name = n.value; s.amount = num(a.value); s.amountBasis = 'manual'; s.day = Math.min(31, Math.max(1, num(d.value) || 1)); updateSubsTotal(); }));
       if (typeof bindPad === 'function') { bindPad(a); bindPad(d); }
       x.addEventListener('click', () => { settingsDirty = true; settings.subs = settings.subs.filter((q) => q.id !== s.id); renderSubs(); });
-      row.append(n, a, d, x); box.appendChild(row);
+      row.append(n, a, d, x); box.appendChild(row); const note=document.createElement('small');note.className='muted';note.textContent=s.endedOn ? `${s.endedOn}終了・以後の予定なし（履歴保持）` : s.amountBasis==='fixed' ? '確認済み月額' : '円額は仮見込み・次回明細で更新';box.appendChild(note);
     }
     updateSubsTotal();
   }
-  function updateSubsTotal() { const t = (settings.subs || []).reduce((a, s) => a + num(s.amount), 0); $('subs-total').textContent = `合計 ${yen(t)}円/月`; }
+  function updateSubsTotal() { const t = scheduledSubs(ymOf(new Date())).reduce((a, s) => a + num(s.amount), 0); $('subs-total').textContent = `今月の予定 ${yen(t)}円（仮見込みを含む・終了分除外）`; }
 
   // ---------- 今月のやること ----------
   function todoDone(ym, key) { return !!((state.todos.done[ym] || {})[key]); }
@@ -1575,7 +1583,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       settings.reserveMonthly = num($('st-reserve').value);
       settings.cardCheckDiff = num($('st-checkDiff').value) || 3000;
       settings.cardCheckDays = num($('st-checkDays').value) || 3;
-      settings.subs = (settings.subs || []).filter((s) => s.name || s.amount).map((s) => ({ id: s.id || uid(), name: s.name || '', amount: num(s.amount), day: Math.min(31, Math.max(1, num(s.day) || 1)) }));
+      settings.subs = (settings.subs || []).filter((s) => s.name || s.amount).map((s) => ({ ...s, id: s.id || uid(), name: s.name || '', amount: num(s.amount), day: Math.min(31, Math.max(1, num(s.day) || 1)) }));
       settingsDirty = false; saveSettings(); render(); push('saveSettings', { settings }); showToast('toast4', '設定を保存しました');
     } catch (e) { showToast('toast4', '保存できませんでした', true); console.error(e); }
   });

@@ -66,6 +66,12 @@ const {JSDOM, VirtualConsole}=require('jsdom');
  // Explicit future bill confirmation, not a comparison checkpoint, updates the statement.
  w.document.getElementById('check-month').value='2027-01';w.document.getElementById('check-basis').value='billing';w.document.getElementById('check-confirmed').checked=true;
  chk.value='12345';chk.dispatchEvent(new w.Event('input',{bubbles:true}));w.document.getElementById('save').click();assert.equal(w.__test.get().state.overrides.billing.statements['2027-01'].amount,12345);
+ // Reservation starts before billing day; actual replaces forecast once, canceled plans stay historical.
+ const subFixture={settings:{...fixture.settings,reserveSubsInBudget:true,subs:[{id:'s',name:'Example subscription',amount:1000,day:20},{id:'ended',name:'Ended',amount:15000,day:6,active:false,endedOn:'2026-11-05'}]},state:fixture.state,log:[]};
+ await set(subFixture);c=await run('2026-11-01');assert.equal(c.pace.subsReserved,1000);assert.equal(c.pace.livingLeft,69000);
+ await set({...subFixture,log:[{...row('actual','2026-11-20',1200),merchant:'Example subscription'}]});c=await run('2026-11-21');assert.equal(c.subsExpectedTotal,0);assert.equal(c.pace.subsReserved,1200);assert.equal(c.pace.livingLeft,68800);assert.equal(c.futureBills[0].amount,1200);
+ await set(subFixture);c=await run('2026-12-01');assert.equal(c.pace.subsReserved,1000);
+ assert.equal(w.__test.matchesSub({merchant:'U-NEXT',amount:1400},{id:'un',name:'U-NEXT',amount:2189,monthlyMatchExact:true}),false);
  // Real snapshot is optional, kept outside repository and never committed.
  if(process.env.YOHAKU_PRIVATE_FIXTURE){const live=JSON.parse(fs.readFileSync(process.env.YOHAKU_PRIVATE_FIXTURE));await set(live);const before=await page.evaluate(()=>JSON.stringify(__test.flattenLog()));c=await run('2026-11-11');await page.evaluate(()=>__test.render());const after=await page.evaluate(()=>JSON.stringify(__test.flattenLog()));assert.equal(before,after);assert.equal((await page.evaluate(()=>__test.get())).settings.subs.filter(s=>s.name==='1Password').length,1);console.log('Live fixture:',JSON.stringify({livingUsed:c.pace.livingUsed,currentBill:c.lines.find(x=>x.key==='fixed').amt,currentSummary:await page.evaluate(()=>{const b=__test.billSummary('2026-11');return {recorded:b.recorded,forecast:b.forecast}}),future:c.futureBills.map(b=>({month:b.ym,recorded:b.recorded,forecast:b.forecast})),records:live.log.length}));}
  assert.deepEqual(errors,[]); console.log('PASS: app integration scenarios in jsdom, no JS errors.');dom.window.close();
