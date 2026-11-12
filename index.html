@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Yohaku</title>
 <meta name="description" content="口座残高と楽天カードの数字から、本当に使えるお金（余白）を出す">
 <meta name="color-scheme" content="light dark">
@@ -292,6 +292,44 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
 .pad-grid button:focus-visible { outline: 2px solid var(--focus); }
 .input.editing { border-color: var(--accent); background: var(--surface); box-shadow: 0 0 0 2px var(--accent-soft); }
 @media (prefers-reduced-motion: reduce) { .meter .fill { transition: none; } }
+
+/* Monthly dashboard: separate actual use from payment timing. */
+.tab { gap: 14px; }
+.card { padding: 18px; border-radius: 20px; gap: 12px; box-shadow: 0 3px 12px rgba(20,49,63,.035); }
+.section-title > span:first-child { white-space: normal; }
+.section-title { font-size: 14px; }
+.muted, .field-help { line-height: 1.65; }
+.field-help { margin: 0; font-size: 12px; color: var(--text-2); }
+.status-pill { font-size: 11px; padding: 3px 9px; border-radius: 20px; background: var(--accent-soft); color: var(--accent-ink); white-space: nowrap; }
+.spending-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.spending-tile { background: var(--accent-soft); border-radius: 15px; padding: 15px 12px; display: flex; flex-direction: column; gap: 6px; }
+.spending-tile.other { background: var(--surface-2); }
+.tile-label { font-size: 13px; font-weight: 600; color: var(--text-2); }
+.spending-tile strong { font-size: clamp(21px,6vw,28px); line-height: 1.25; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+.tile-note { font-size: 10px; color: var(--text-2); }
+.total-strip, .forecast-strip, .payment-next { display:flex; justify-content:space-between; align-items:baseline; gap:10px; font-size:13px; }
+.total-strip { border-bottom:1px solid var(--line); padding-bottom:12px; }
+.forecast-strip { color:var(--text-2); font-size:12px; }
+.payment-main { display:flex; justify-content:space-between; gap:12px; align-items:center; }
+.payment-main div { display:flex; flex-direction:column; gap:4px; font-size:14px; }
+.payment-main small { font-size:11px; color:var(--text-2); }
+.payment-main > strong { font-size:26px; letter-spacing:-.04em; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.payment-next { padding-top:12px; border-top:1px solid var(--line); color:var(--text-2); }
+.transaction-row { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;padding:14px 0;border-bottom:1px solid var(--line); }
+.transaction-info { min-width:0;display:flex;flex-direction:column;gap:4px; }
+.transaction-info strong { font-size:13px;overflow-wrap:anywhere; }
+.transaction-info small { font-size:11px;color:var(--text-2); }
+.transaction-amount { font-size:15px;font-variant-numeric:tabular-nums;white-space:nowrap; }
+.transaction-row .linkbtn { grid-column:1/-1;justify-self:start;font-size:12px;padding:4px 0;min-height:32px; }
+.summary-box { background:var(--surface-2);padding:12px;border-radius:12px;font-size:13px;line-height:1.8; }
+.disclosure summary { cursor:pointer;font-size:13px;font-weight:600;min-height:32px; }
+.disclosure[open] summary { margin-bottom:12px; }
+.confirm-choice { display:flex;gap:8px;align-items:flex-start;font-size:12px;line-height:1.7; }
+.confirm-choice input { flex:0 0 auto; width:18px; height:18px; }
+.fields { grid-template-columns:1fr !important; gap:24px; }
+.fields .field { padding-bottom:18px;border-bottom:1px solid var(--line); }
+.fields .field:last-child { border-bottom:0;padding-bottom:0; }
+@media (max-width:380px) { .main { padding-inline:10px; } .card { padding:14px; } .payment-main > strong { font-size:23px; } }
 </style>
 </head>
 <body>
@@ -301,7 +339,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     <button type="button" class="nav-btn active" data-tab="home"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg><span>ホーム</span></button>
     <button type="button" class="nav-btn" data-tab="input"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h4L18 10l-4-4L4 16v4z"/><path d="M13 7l4 4"/></svg><span>入力</span></button>
     <button type="button" class="nav-fab" id="fab" aria-label="使った金額を記録"><span class="disc">＋</span><span>使った</span></button>
-    <button type="button" class="nav-btn" data-tab="history"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>履歴</span></button>
+    <button type="button" class="nav-btn" data-tab="history"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span>内訳</span></button>
     <button type="button" class="nav-btn" data-tab="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><span>設定</span></button>
   </nav>
 
@@ -332,17 +370,23 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
         <div class="ledger" id="ledger" hidden></div>
         <div id="hero-hints" style="display:flex;flex-direction:column;gap:6px"></div>
       </section>
-      <section class="card">
-        <div class="section-title"><span>引落チェック</span><span class="sub" id="check-sub"></span></div>
-        <div id="check-verdict"></div>
-        <div class="hero-foot"><button type="button" class="linkbtn" id="tl-toggle" aria-expanded="false" aria-controls="check-tl">入出金の明細を見る</button><span class="kv" id="check-pay"></span></div>
-        <div class="timeline" id="check-tl" hidden></div>
+      <section class="card spending-card">
+        <div class="section-title"><span id="spending-title">今月のカード利用</span><span class="status-pill">記録済み</span></div>
+        <div class="spending-grid">
+          <div class="spending-tile"><span class="tile-label">サブスク</span><strong id="subs-actual">—</strong><span class="tile-note">記録された定期支払い</span></div>
+          <div class="spending-tile other"><span class="tile-label">それ以外</span><strong id="other-actual">—</strong><span class="tile-note">買い物・チャージなど</span></div>
+        </div>
+        <div class="total-strip"><span>記録済みの合計</span><strong id="actual-total">—</strong></div>
+        <p class="muted" id="spending-note"></p>
+        <div class="forecast-strip"><span>まだ記録のないサブスク予定</span><strong id="subs-pending">—</strong></div>
+        <p class="muted">予定額は上の実績に含めません。設定が古い場合や店名不明の利用は、内訳で確認できます。</p>
+        <button type="button" class="linkbtn" id="spending-detail">利用の内訳を見る →</button>
       </section>
-      <section class="card">
-        <div class="section-title"><span>楽天カード（利用月） <b id="meter-val" style="font-variant-numeric:tabular-nums"></b><small id="meter-target" class="muted"></small></span><span class="sub" id="meter-left"></span></div>
-        <div class="meter" role="meter" aria-label="今月の楽天カード利用額" aria-valuemin="0" id="meter"><div class="fill" id="meter-fill" style="width:0%"></div></div>
-        <div class="meter-legend" id="meter-sub" hidden></div>
-        <div class="proj" id="pace-proj"></div>
+      <section class="card payment-card">
+        <div class="section-title"><span>カードの支払い</span><span class="sub">利用額とは別</span></div>
+        <div class="payment-main"><div><span id="home-fixed-label">今月払う分</span><small id="home-fixed-note"></small></div><strong id="home-fixed">—</strong></div>
+        <div class="payment-next"><span id="home-next-label">来月払う見込み</span><strong id="home-next">—</strong></div><div class="hint" id="home-next-note"></div>
+        <div class="actions"><button type="button" class="linkbtn" id="payment-edit">楽天アプリの金額を入力 →</button></div>
       </section>
       <section class="card todo">
         <div class="section-title"><span>今月のやること</span><span class="sub"><span id="todo-sub"></span> <button type="button" class="linkbtn" id="todo-add-toggle" style="font-size:12px;padding:0 0 0 8px">＋追加</button></span></div>
@@ -353,28 +397,28 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     <!-- ===== INPUT ===== -->
     <section class="tab" data-tab="input" hidden>
       <section class="card">
-        <div class="section-title"><span>数字を入れる</span><span class="sub" id="asof-sub"></span></div>
+        <div class="section-title"><span>楽天アプリを見ながら入力</span><span class="sub" id="asof-sub"></span></div>
         <div class="fields">
           <div class="field">
-            <label for="in-balance"><span>口座残高</span><span class="tip">銀行アプリの今の残高（週1）</span></label>
+            <label for="in-balance"><span>銀行口座の残高</span><span class="tip">残高を確認したときだけ更新</span></label>
             <input class="input" id="in-balance" inputmode="numeric" autocomplete="off" placeholder="0">
           </div>
           <div class="field">
-            <label for="in-fixed"><span>楽天カード 今月支払い額</span><span class="tip" id="fixed-note">月初に見込みが自動で入る</span></label>
-            <input class="input" id="in-fixed" inputmode="numeric" autocomplete="off" placeholder="0">
+            <label for="in-fixed"><span id="fixed-label">① 今月払う分</span><span class="tip" id="fixed-note">月初に見込みが自動で入る</span></label>
+            <input class="input" id="in-fixed" inputmode="numeric" autocomplete="off" placeholder="0"><p class="field-help">ポイント利用後の、実際に引き落とされる金額。ポイントを別にもう一度引く必要はありません。</p>
           </div>
           <div class="field">
-            <label for="in-cardapp"><span>楽天カードアプリの照合額</span><span class="tip" id="cardapp-note">見たときだけ（答え合わせ用）</span></label>
+            <label for="in-cardapp"><span id="cardapp-label">② 来月払う分・現在の表示額</span><span class="tip" id="cardapp-note">見たときだけ（答え合わせ用）</span></label>
             <input class="input sm" id="in-cardapp" inputmode="numeric" autocomplete="off" placeholder="入れなくてよい">
-            <label for="check-basis">比べる基準</label><select class="input sm" id="check-basis"><option value="billing">支払い月の明細</option><option value="usage">利用月の集計</option></select>
-            <input class="input sm" id="check-month" type="month" aria-label="照合する月">
+            <p class="field-help">楽天アプリで下の「支払い月」を選び、その表示額を入力。まだ増える途中の金額は答え合わせだけに使います。</p><label for="check-basis">楽天アプリで見ている数字</label><select class="input sm" id="check-basis"><option value="billing">支払い月の明細</option><option value="usage">利用月の集計</option></select>
+            <label for="check-month">対象の月</label><input class="input sm" id="check-month" type="month" aria-label="照合する月"><label class="confirm-choice"><input id="check-confirmed" type="checkbox"> この月の支払い額が確定したので、引落見込みにも反映する</label>
           </div>
         </div>
         <div class="actions">
           <button class="btn" id="save">保存して更新</button>
           <span class="toast" id="toast" aria-live="polite"></span>
         </div>
-        <div class="muted">生活費は利用日で集計します。請求見込みは通常カードが月末締め、楽天カードから楽天キャッシュへのチャージが25日締め（26日以降は翌々月）です。キャッシュでの支払い自体には締め日を適用しません。実際の請求月は楽天明細が優先。照合額は比較だけに使い、支出や残高は変えません。</div>
+        <div class="muted">「使った月」と「払う月」は違います。月末の利用は、お店からの売上情報が届く時期で翌月以降の支払いに回ることがあります。楽天アプリの支払い月を優先し、記録を二重に追加しません。</div>
       </section>
       <section class="card">
         <div class="section-title"><span>臨時の確定支出</span><span class="sub">払ったらチェック</span></div>
@@ -405,9 +449,9 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
             <span class="muted">特別費と防衛資金。25日に足し、使ったら減らす</span>
           </div>
           <div class="field">
-            <label for="in-pay"><span>楽天ペイ残高</span></label>
+            <label for="in-pay"><span>楽天キャッシュ残高（本人確認）</span></label>
             <input class="input sm" id="in-pay" inputmode="numeric" placeholder="0">
-            <span class="muted">記録で自動増減。ズレたらここで直す</span>
+            <span class="muted">楽天ペイアプリの残高を入力。支払いメール停止中のため、自動計算だけでは正しい残高になりません。</span>
           </div>
         </div>
         <div class="actions"><button class="btn ghost sm" id="save2">この2つを保存</button><span class="toast" id="toast2" aria-live="polite"></span></div>
@@ -416,6 +460,26 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
 
     <!-- ===== HISTORY ===== -->
     <section class="tab" data-tab="history" hidden>
+      <section class="card" id="usage-detail-card">
+        <div class="section-title"><span>利用の内訳</span></div>
+        <label for="usage-month">使った月</label><input class="input sm" id="usage-month" type="month">
+        <div class="summary-box" id="usage-summary"></div>
+        <div class="list" id="usage-detail"></div>
+        <details class="disclosure"><summary>未記録のサブスク予定</summary><div class="list" id="pending-subs-list"></div><p class="muted">設定にある予定です。店名不明・合算請求は照合できず、実績と重なることがあります。解約したものは「設定」で見直してください。</p></details>
+      </section>
+      <section class="card">
+        <div class="section-title"><span>引落チェック</span><span class="sub" id="check-sub"></span></div>
+        <div id="check-verdict"></div>
+        <div class="hero-foot"><button type="button" class="linkbtn" id="tl-toggle" aria-expanded="false" aria-controls="check-tl">入出金の明細を見る</button><span class="kv" id="check-pay"></span></div>
+        <div class="timeline" id="check-tl" hidden></div>
+      </section>
+      <section class="card">
+        <div class="section-title"><span>今月のカード目標と見込み</span><span class="sub" id="meter-left"></span></div>
+        <div><b id="meter-val"></b><small id="meter-target" class="muted"></small></div>
+        <div class="meter" role="meter" aria-label="今月のカード利用見込み" aria-valuemin="0" id="meter"><div class="fill" id="meter-fill"></div></div>
+        <div class="muted" id="meter-sub"></div><div class="proj" id="pace-proj"></div>
+      </section>
+      <details class="card disclosure"><summary>口座・引落・借入を含む参考計算</summary><div class="ledger" id="account-ledger"></div></details>
       <section class="card">
         <div class="section-title"><span>今月の記録</span><span class="sub" id="log-sub"></span></div>
         <div class="sumline" id="log-sum"></div>
@@ -589,7 +653,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   let settings = { ...EMPTY_SETTINGS };
   let state = { ...EMPTY_STATE };
   let hist = {};
-  let formDirty = false, settingsDirty = false, fixedDirty = false, cardAppDirty = false, mainDirty = false;
+  let formDirty = false, settingsDirty = false, fixedDirty = false, cardAppDirty = false, mainDirty = false, balanceDirty = false;
 
   const LS = {
     get(k) { try { const v = localStorage.getItem('yohaku:' + k); if (v !== null) return JSON.parse(v); const old = localStorage.getItem('tsukaeru:' + k); return old ? JSON.parse(old) : null; } catch (e) { return null; } },
@@ -627,13 +691,27 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
 
   // ---------- calculation ----------
   // サブスク名と、カード明細に出る表記（カタカナや運営会社名）を結びつける
-  const SUB_ALIASES = [['u-next', 'ユーネクスト'], ['chatgpt', 'openai', 'オープンエーアイ'], ['claude', 'anthropic', 'アンスロピック'], ['psn', 'playstation', 'プレイステーション', 'ソニー'], ['google', 'グーグル'], ['icloud', 'apple', 'アップル'], ['amazon prime', 'amazon', 'アマゾン'], ['楽天モバイル', 'ラクテンモバイル'], ['ドコモ', 'docomo']];
-  function subKeys(name) { let keys = [name]; SUB_ALIASES.forEach((g) => { if (g.some((k) => name.includes(k))) keys = keys.concat(g); }); return keys.filter(Boolean); }
+  const SUB_ALIASES = [['u-next', 'ユーネクスト'], ['chatgpt', 'openai *chatgpt'], ['claude', 'anthropic *claude'], ['psn', 'playstation plus', 'ps plus'], ['google ai pro', 'google one'], ['icloud'], ['amazon prime', 'アマゾンプライム'], ['楽天モバイル', 'ラクテンモバイル'], ['1password']];
+  const normalized = (v) => String(v || '').normalize('NFKC').toLowerCase().replace(/[\s・_－-]/g, '');
   function matchesSub(r, s) {
-    const name = String(s.name || '').toLowerCase().trim(); if (!name) return false;
-    const txt = ((r.merchant || '') + ' ' + (r.memo || '')).normalize('NFKC').toLowerCase();
-    if (subKeys(name).some((k) => txt.includes(k))) return true;
-    return r.cat === 'サブスク' && num(r.amount) === num(s.amount) && num(s.amount) > 0;
+    const link = state.overrides?.subscriptions?.[String(r.id)];
+    if (link) return link.type === 'subscription' && link.subId === s.id;
+    const name = normalized(s.name), txt = normalized((r.merchant || '') + ' ' + (r.memo || ''));
+    if (!name) return false;
+    const group = SUB_ALIASES.find((g) => g.some((k) => name.includes(normalized(k))));
+    if (group) return group.some((k) => txt.includes(normalized(k)));
+    // Generic labels (Wi-Fi etc.) only match an exact record label, not a shopping description.
+    return [r.memo, r.merchant].some((v) => normalized(v) === name);
+  }
+  function isSubscription(r) {
+    const link = state.overrides?.subscriptions?.[String(r.id)];
+    if (link) return link.type === 'subscription';
+    return r.cat === 'サブスク' || (settings.subs || []).some((s) => matchesSub(r, s));
+  }
+  function spendingSummary(ym) {
+    const u = utilizationRows(ym);
+    const subs = u.rows.filter(isSubscription), other = u.rows.filter((r) => !isSubscription(r));
+    return { rows: u.rows, subs, other, base: u.base, subsTotal: subs.reduce((a,r)=>a+num(r.amount),0), otherTotal: other.reduce((a,r)=>a+num(r.amount),0), total: u.base+u.rows.reduce((a,r)=>a+num(r.amount),0) };
   }
   // 請求月の補足は既存の overrides JSON に保存。log の列・利用日は変更しない。
   function billingMeta() {
@@ -761,7 +839,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const subs = settings.subs || [];
     const subsExpected = subs.filter((sub) => !cardLog.some((r) => matchesSub(r, sub)) && !(legacyDay && (num(sub.day) || 1) < legacyDay));
     const subsExpectedTotal = subsExpected.reduce((a, sub) => a + num(sub.amount), 0);
-    const subsMatchedTotal = cardLog.filter((r) => subs.some((sub) => matchesSub(r, sub))).reduce((a, r) => a + num(r.amount), 0);
+    const subsMatchedTotal = cardLog.filter(isSubscription).reduce((a, r) => a + num(r.amount), 0);
     const extrasOpen = (state.extras || []).filter((e) => !e.done);
     const extrasTotal = extrasOpen.reduce((a, e) => a + num(e.amount), 0);
     // 口座から直接使った分（残高を入れた日より後の記録）
@@ -777,12 +855,12 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const lines = [];
     lines.push({ key: 'balance', name: '口座残高', amt: num(state.balance), sign: +1, note: state.asOf ? `${md(state.asOf)} 時点` : '' });
     lines.push({ key: 'salary', name: `給料 ${settings.salaryDay}日`, amt: num(settings.salary), sign: +1, skip: salaryPaid, toggle: 'salary', paid: salaryPaid, note: salaryPaid ? '口座残高に含まれている' : 'まだ入っていない' });
-    lines.push({ key: 'fixed', name: `カード引落 ${settings.cardDay}日`, amt: num(state.cardFixed), sign: -1, skip: cardPaid, toggle: 'card', paid: cardPaid, note: cardPaid ? '引落済み' : (state.cardFixedSource === 'estimate' ? '見込み（記録から）' : '確定') });
+    lines.push({ key: 'fixed', name: `${Number(ym.slice(5))}月カード支払い（${settings.cardDay}日）`, amt: num(state.cardFixed), sign: -1, skip: cardPaid, toggle: 'card', paid: cardPaid, note: cardPaid ? '引落済み' : (state.cardFixedSource === 'estimate' ? '見込み（記録から）' : '確定') });
     lines.push({ key: 'rent', name: `家賃 ${settings.rentDay}日`, amt: num(settings.rent), sign: -1, skip: rentPaid, toggle: 'rent', paid: rentPaid, note: rentPaid ? '引落済み' : 'これから引落' });
     if (extrasOpen.length) lines.push({ key: 'extras', name: '臨時の確定支出', amt: extrasTotal, sign: -1, note: extrasOpen.map((e) => e.name).join('・') });
     if (bankAfter.length) lines.push({ key: 'bank', name: '口座から直接使った分', amt: bankAfterTotal, sign: -1, note: `残高入力後 ${bankAfter.length}件` });
     futureBills.concat(overdueBills).forEach((bill) => {
-      if (bill.amount) lines.push({ key: 'billing', name: `${Number(bill.ym.slice(5))}月支払い分${bill.ym < ym ? '（未払い指定）' : ''}`, amt: bill.amount, sign: -1, note: bill.confirmed ? '入力した確定額' : `見込み（記録 ${yen(bill.recorded)}${bill.forecast ? ' ＋ 未記録サブスク ' + yen(bill.forecast) : ''}）` });
+      if (bill.amount) lines.push({ key: 'billing', name: `${Number(bill.ym.slice(5))}月支払い分${bill.ym < ym ? '（未払い指定）' : ''}`, amt: bill.amount, sign: -1, note: bill.confirmed ? '本人入力の支払い額' : `見込み（記録 ${yen(bill.recorded)}${bill.forecast ? ' ＋ 未記録サブスク ' + yen(bill.forecast) : ''}）` });
     });
     // 借入: 口座に入っていても自分のお金ではないので引く
     const debts = (state.debts || []).filter((x) => num(x.balance) > 0);
@@ -822,7 +900,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const dow = (now.getDay() + 6) % 7;
     const weekStart = Math.max(1, d - dow), weekEnd = Math.min(daysInMonth, d - dow + 6);
     const dayOf = (r) => Number(String(r.date).slice(8, 10));
-    const livingRows = cardLog.filter((r) => !subs.some((sub) => matchesSub(r, sub)))
+    const livingRows = cardLog.filter((r) => !isSubscription(r))
       .concat(monthLog.filter((r) => r.method === 'cash' || (r.method === 'bank' && r.cat !== '返済')));
     const livingBeforeWeek = (legacyDay && legacyDay <= weekStart ? legacyLiving : 0) + livingRows.filter((r) => dayOf(r) < weekStart).reduce((a, r) => a + num(r.amount), 0);
     const weekUsed = livingUsed - livingBeforeWeek;
@@ -875,7 +953,8 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       lg.appendChild(row);
     }
     { const t = document.createElement('div'); t.className = 'row total'; t.innerHTML = `<div class="label"><span class="name">生活費 ${over ? 'オーバー' : 'あと'}</span></div><div class="amt ${over ? 'minus' : 'plus'}">${yen(Math.abs(p.livingLeft))}</div>`; lg.appendChild(t); }
-    { const h = document.createElement('div'); h.className = 'grp'; h.style.paddingTop = '16px'; h.innerHTML = '<span>参考：全部払ったあとの残り<br><span style="font-weight:400;color:var(--text-3)">口座と給料から、引落・今月のカード利用・借入まで全部引いた額</span></span><span></span>'; lg.appendChild(h); }
+    const accountLedger = $('account-ledger'); accountLedger.innerHTML = '';
+    { const h = document.createElement('div'); h.className = 'grp'; h.style.paddingTop = '16px'; h.innerHTML = '<span>参考：全部払ったあとの残り<br><span style="font-weight:400;color:var(--text-3)">口座と給料から、各支払い月のカード代・家賃・借入等を一度ずつ引いた参考額</span></span><span></span>'; accountLedger.appendChild(h); }
     const GROUPS = [['in', '手元と、これから入るお金', +1], ['out', 'これから口座から出るお金', -1], ['used', 'もう使ったお金（次のカード請求など）', -1], ['debt', '借りているお金（返す分）', -1], ['keep', '取り分けておくお金', -1]];
     const GROUP_OF = { balance: 'in', salary: 'in', fixed: 'out', rent: 'out', extras: 'out', bank: 'used', current: 'used', used: 'used', subs: 'used', debt: 'debt', reserve: 'keep' };
     const grouped = GROUPS.map(([g, title, sign]) => ({ g, title, sign, rows: c.lines.filter((l) => (GROUP_OF[l.key] || 'out') === g) })).filter((x) => x.rows.length);
@@ -883,7 +962,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       const sub = grp.rows.reduce((a, l) => a + (l.skip ? 0 : l.amt), 0);
       const h = document.createElement('div'); h.className = 'grp';
       h.innerHTML = `<span>${grp.title}</span><span class="${grp.sign > 0 ? 'plus' : 'minus'}">${grp.sign > 0 ? '+' : '−'}${yen(sub)}</span>`;
-      lg.appendChild(h);
+      accountLedger.appendChild(h);
       for (const l of grp.rows) {
       const row = document.createElement('div'); row.className = 'row sub' + (l.skip ? ' skip' : '');
       const label = document.createElement('div'); label.className = 'label';
@@ -898,12 +977,12 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
       const amt = document.createElement('div');
       amt.className = 'amt ' + (l.skip ? 'muted' : (l.sign > 0 ? 'plus' : 'minus'));
       amt.textContent = (l.sign > 0 ? '+' : '−') + yen(l.amt);
-      row.appendChild(label); row.appendChild(amt); lg.appendChild(row);
+      row.appendChild(label); row.appendChild(amt); accountLedger.appendChild(row);
       }
     }
     const tot = document.createElement('div'); tot.className = 'row total';
     tot.innerHTML = `<div class="label"><span class="name">全部払ったあとの残り</span></div><div class="amt ${c.available < 0 ? 'minus' : 'plus'}">${yen(c.available)}</div>`;
-    lg.appendChild(tot);
+    accountLedger.appendChild(tot);
 
     const hints = $('hero-hints'); hints.innerHTML = '';
     const addHint = (cls, text) => { const h = document.createElement('div'); h.className = 'hint ' + cls; h.textContent = text; hints.appendChild(h); };
@@ -921,10 +1000,10 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     const v = $('check-verdict'); v.innerHTML = '';
     const verdict = document.createElement('div');
     if (!c.timeline.length) { verdict.className = 'hint plain'; verdict.textContent = '今月これから口座に入る・出るものはありません。'; }
-    else if (c.minRun < 0) { verdict.className = 'hint crit'; verdict.textContent = `${mm}/${c.minEv.day} の${c.minEv.name}で ${yen(-c.minRun)}円 不足。先に金券・立替を回収し、残りだけ分割に。`; }
-    else { verdict.className = 'hint good'; verdict.textContent = `今月の引落は全て払えます。引落後の残高 ${yen(c.endBalance)}円 の見込み。`; }
+    else if (c.minRun < 0) { verdict.className = 'hint crit'; verdict.textContent = `${mm}/${c.minEv.day} の${c.minEv.name}で ${yen(-c.minRun)}円 不足。入力した予定に基づく試算です。最新の口座残高と入出金を確認してください。`; }
+    else { verdict.className = 'hint good'; verdict.textContent = `入力した予定では、引落後の残高 ${yen(c.endBalance)}円 の見込み。`; }
     v.appendChild(verdict);
-    $('check-pay').innerHTML = `楽天ペイ残高 <b>${yen(num(state.pay))}</b>`;
+    $('check-pay').textContent = '楽天キャッシュ残高は入力欄で確認';
     const tl = $('check-tl'); tl.innerHTML = '';
     const head = document.createElement('div'); head.className = 'ev';
     head.innerHTML = `<span class="d">今日</span><span>口座残高${c.bankPendTotal ? '（直接分を引いた後）' : ''}</span><span class="a"></span><span class="b">${yen(c.start)}</span>`;
@@ -954,6 +1033,22 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     // 月末見込み（今日までの1日平均を月末まで延ばす）。1行ずつ「金額・予算内/超え」
     const projRow = (name, v, lim, word) => `<span>${name}</span><span class="v">${yen(v)}円</span><span class="${v <= lim ? 'ok' : 'ng'}">${lim ? (v <= lim ? `${word}内 ${yen(lim - v)}円` : `${word}を ${yen(v - lim)}円 超える`) : ''}</span>`;
     $('pace-proj').innerHTML = `<span class="h">月末見込み</span>${projRow('生活費', p.projLiving, p.livingBudget, '予算')}<span></span>${projRow('楽天', p.projCard, target0, '目標')}`;
+
+    const spend = spendingSummary(c.ym), nextYm = Billing.shiftMonth(c.ym, 1), nextBill = billSummary(nextYm);
+    $('spending-title').textContent = `${mm}月に使ったカード分`;
+    $('subs-actual').textContent = yen(spend.subsTotal) + '円';
+    $('other-actual').textContent = yen(spend.otherTotal) + '円';
+    $('actual-total').textContent = yen(spend.total) + '円';
+    $('subs-pending').textContent = yen(c.subsExpectedTotal) + '円';
+    $('spending-note').textContent = '利用日で集計。店名未確認の利用は「それ以外」に含みます。' + (spend.base ? ` 分類できない旧集計 ${yen(spend.base)}円も合計に含みます。` : '');
+    $('home-fixed-label').textContent = `${mm}月に払う分`;
+    $('home-fixed').textContent = yen(state.cardFixed) + '円';
+    $('home-fixed-note').textContent = c.cardPaid ? '引落済み' : state.cardFixedSource === 'estimate' ? '記録からの見込み' : '本人入力の支払い額・ポイント差引後';
+    $('home-next-label').textContent = `${Number(nextYm.slice(5))}月に払う${nextBill.confirmed ? '分' : '見込み'}`;
+    $('home-next').textContent = yen(nextBill.amount) + '円';
+    $('home-next-note').textContent = nextBill.confirmed ? '本人が入力した支払い額' : `未確定：記録 ${yen(nextBill.recorded)}円 ＋ 設定上の予定 ${yen(nextBill.forecast)}円。取込遅れ・サービス未照合で重複の可能性があります。`;
+    if (!$('usage-month').value) $('usage-month').value = c.ym;
+    renderUsageDetail();
 
     // todos
     renderTodos(c, now);
@@ -985,7 +1080,9 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     if (!$('billing-month').value) $('billing-month').value = Billing.shiftMonth(c.ym, 1);
     renderBilling();
     $('asof-sub').textContent = state.asOf ? `前回 ${md(state.asOf)}` : '未入力';
-    $('fixed-note').textContent = c.cardPaid ? `${c.ym} 分は引落済み。この欄は今月分です`  : (state.cardFixedSource === 'estimate' ? `${c.ym} 分の見込み。楽天の同じ支払い月で確認` : (num(state.cardFixed) ? '確定' : '請求月別の見込み'));
+    $('fixed-label').textContent = `① ${mm}月に払う分（今月）`;
+    $('cardapp-label').textContent = `② ${Number(nextYm.slice(5))}月に払う分・現在の表示額`;
+    $('fixed-note').textContent = c.cardPaid ? `${c.ym} 分は引落済み。この欄は今月分です`  : (state.cardFixedSource === 'estimate' ? `${c.ym} 分の見込み。楽天の同じ支払い月で確認` : (num(state.cardFixed) ? '本人入力の支払い額' : '本人入力の支払い額'));
     const lastChk = (state.cardChecks || []).slice(-1)[0];
     $('cardapp-note').textContent = lastChk ? `前回 ${md(lastChk.at.slice(0, 10))} ${yen(lastChk.amount)}・${lastChk.status}` : '見たときだけ（答え合わせ用）';
 
@@ -1072,6 +1169,37 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
 
     if (!settingsDirty) fillSettingsForm();
   }
+
+  function renderUsageDetail() {
+    const ym = $('usage-month').value; if (!Billing.monthValid(ym)) return;
+    const u = spendingSummary(ym), root = $('usage-detail'); root.innerHTML = '';
+    $('usage-summary').textContent = `記録済み ${yen(u.total)}円 ｜ サブスク ${yen(u.subsTotal)}円 ／ それ以外 ${yen(u.otherTotal)}円` + (u.base ? ` ／ 分類不明の旧集計 ${yen(u.base)}円` : '');
+    for (const r of [...u.rows].sort((a,b)=>String(b.date).localeCompare(String(a.date)))) {
+      const row=document.createElement('div');row.className='transaction-row';
+      const info=document.createElement('div');info.className='transaction-info';
+      const name=document.createElement('strong');name.textContent=r.merchant||r.memo||'店名未確認';
+      const sub=document.createElement('small');const pay=paymentOf(r);sub.textContent=`${md(r.date)} 利用 ・ ${isSubscription(r)?'サブスク':'それ以外'} ・ ${pay ? Number(pay.month.slice(5))+'月払い'+(pay.source==='statement'?'確認済み':'の見込み') : ''}`;
+      info.append(name,sub);const amount=document.createElement('strong');amount.className='transaction-amount';amount.textContent=yen(r.amount)+'円';
+      const edit=document.createElement('button');edit.type='button';edit.className='linkbtn';edit.textContent='区分を直す';edit.disabled=!r.id;
+      edit.addEventListener('click',()=>{
+        const subs=settings.subs||[];
+        const labels=subs.map((s,i)=>`${i+1}: ${s.name}`).join('\n');
+        const ans=prompt('0: それ以外\n'+labels+'\n空欄: 自動判定に戻す', '');if(ans===null)return;
+        const key=ans.trim();if(key!=='' && (!/^\d+$/.test(key)||Number(key)>subs.length)){alert('一覧の番号を入力してください');return;}
+        state.overrides=state.overrides||{};const m=state.overrides.subscriptions||(state.overrides.subscriptions={});
+        if(key==='')delete m[String(r.id)];else m[String(r.id)]=Number(key)===0?{type:'other'}:{type:'subscription',subId:subs[Number(key)-1].id};
+        saveState();pushFields({overrides:state.overrides});render();
+      });
+      row.append(info,amount,edit);root.appendChild(row);
+    }
+    if(!u.rows.length)root.textContent='この月の記録はまだありません。';
+    const box=$('pending-subs-list');box.innerHTML='';
+    for(const sub of missingSubs(ym)){const row=document.createElement('div');row.className='transaction-row';const n=document.createElement('span');n.textContent=sub.name;const a=document.createElement('strong');a.textContent=yen(sub.amount)+'円';row.append(n,a);box.appendChild(row);}
+  }
+  $('usage-month').addEventListener('change',renderUsageDetail);
+  $('spending-detail').addEventListener('click',()=>{showTab('history');$('usage-detail-card').scrollIntoView({block:'start'});});
+  $('payment-edit').addEventListener('click',()=>showTab('input'));
+  $('check-basis').addEventListener('change',()=>{ $('check-confirmed').checked=false;$('check-confirmed').disabled=$('check-basis').value!=='billing'; });
 
   function renderBilling() {
     const ym = $('billing-month').value;
@@ -1347,16 +1475,22 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
   $('save').addEventListener('click', () => {
     try {
       // 楽天カードアプリの照合額 → 答え合わせの記録だけ残す（Yohaku の数字は変えない）
+      if (cardAppDirty && $('check-confirmed').checked && $('check-basis').value === 'billing' && $('in-cardapp').value.trim() !== '') {
+        const ym = $('check-month').value;
+        if (!Billing.monthValid(ym)) throw new Error('支払い月を選んでください');
+        billingMeta().statements[ym] = { amount: num($('in-cardapp').value), at: new Date().toISOString(), source: 'manual' };
+        saveState(); pushFields({ overrides: state.overrides });
+      }
       const chkMsg = cardAppDirty && $('in-cardapp').value.trim() !== '' && num($('in-cardapp').value) >= 0 ? addCardCheck(num($('in-cardapp').value)) : '';
-      cardAppDirty = false; $('in-cardapp').value = '';
+      cardAppDirty = false; $('in-cardapp').value = ''; $('check-confirmed').checked = false;
       // 答え合わせだけなら、口座残高の入力日は動かさない
       if (chkMsg && !mainDirty && state.asOf) { formDirty = false; render(); showToast('toast', chkMsg); if (document.activeElement) document.activeElement.blur(); return; }
       mainDirty = false;
-      state.balance = num($('in-balance').value);
+      if (balanceDirty || !state.asOf) { state.balance = num($('in-balance').value); state.asOf = ymd(new Date()); }
       state.cardFixed = num($('in-fixed').value);
       if (fixedDirty) { state.cardFixedSource = 'confirmed'; billingMeta().statements[ymOf(new Date())] = { amount: state.cardFixed, at: new Date().toISOString(), source: 'manual' }; }
       fixedDirty = false;
-      state.asOf = ymd(new Date());
+      balanceDirty = false;
       formDirty = false;
       saveState();
       const c = compute(new Date());
@@ -1370,6 +1504,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     } catch (e) { showErr(e); }
   });
   ['in-balance', 'in-fixed', 'in-cardapp', 'in-reserve', 'in-pay'].forEach((id) => $(id).addEventListener('input', () => { formDirty = true; }));
+  $('in-balance').addEventListener('input', () => { balanceDirty = true; });
   $('in-fixed').addEventListener('input', () => { fixedDirty = true; });
   $('in-cardapp').addEventListener('input', () => { cardAppDirty = true; formDirty = true; });
   ['in-balance', 'in-fixed'].forEach((id) => $(id).addEventListener('input', () => { mainDirty = true; }));

@@ -7,7 +7,7 @@ const root=path.resolve(__dirname,'..');
 const injection=`window.__test = {
   set(data) { settings={...EMPTY_SETTINGS,...(data.settings||{})}; state={...EMPTY_STATE,...(data.state||{}),overrides:JSON.parse(JSON.stringify(data.state?.overrides||{}))}; hist=data.history||buildHist(data.log||[],[]); },
   run(date) {const now=new Date(date+'T12:00:00');maybeRollover(now);return compute(now);},
-  get(){return JSON.parse(snapshot());}, billSummary, billingMeta, paymentOf, cardCheckRows, applyServer, flattenLog, buildHist, render,
+  get(){return JSON.parse(snapshot());}, matchesSub, isSubscription, spendingSummary, billSummary, billingMeta, paymentOf, cardCheckRows, applyServer, flattenLog, buildHist, render,
   confirm(ym,amount){billingMeta().statements[ym]={amount};},
   actual(id,month){billingMeta().transactions[id]={month};},
   paid(ym,value){state.overrides[ym]={card:value};}
@@ -56,6 +56,16 @@ const {JSDOM, VirtualConsole}=require('jsdom');
  await set({...fixture,state:{...fixture.state,cardCurrent:5000,asOf:'2026-11-20'},log:[row('older','2026-11-10',3000)]});c=await run('2026-11-25');assert.equal(c.pace.livingUsed,5000);
  // ID-less old records remain readable but cannot share a correction key.
  await set({...fixture,log:[{date:'2026-11-26',amount:1000,method:'charge'}]});w.document.getElementById('billing-month').value='2027-01';w.__test.render();assert.equal(w.document.querySelector('#billing-log button').disabled,true);
+ // Broad vendor names and amount equality must never identify a subscription.
+ await set({...fixture,settings:{...fixture.settings,subs:[{id:'prime',name:'Amazon Prime',amount:600},{id:'icloud',name:'iCloud',amount:150},{id:'one',name:'1Password',amount:800}]},log:[{...row('prime','2026-11-03',600),merchant:'アマゾンプライムカイヒ'},{...row('shop','2026-11-04',5380),merchant:'AMAZON.CO.JP'},{...row('apple','2026-11-04',800),merchant:'APPLE COM BILL',cat:'サブスク'}]});
+ assert.equal(w.__test.matchesSub({merchant:'APPLE COM BILL',amount:800,cat:'サブスク'},{id:'icloud',name:'iCloud',amount:150}),false);
+ assert.equal(w.__test.matchesSub({merchant:'AMAZON.CO.JP',amount:600},{id:'prime',name:'Amazon Prime',amount:600}),false);
+ assert.equal(w.__test.matchesSub({merchant:'SONY',amount:1990},{id:'ps',name:'PSN',amount:1990}),false);
+ let spend=w.__test.spendingSummary('2026-11');assert.equal(spend.subsTotal,1400);assert.equal(spend.otherTotal,5380);assert.equal(spend.total,6780);
+ w.__test.render();assert.equal(w.document.querySelector('#subs-actual').textContent,'1,400円');assert.equal(w.document.querySelector('#other-actual').textContent,'5,380円');
+ // Explicit future bill confirmation, not a comparison checkpoint, updates the statement.
+ w.document.getElementById('check-month').value='2027-01';w.document.getElementById('check-basis').value='billing';w.document.getElementById('check-confirmed').checked=true;
+ chk.value='12345';chk.dispatchEvent(new w.Event('input',{bubbles:true}));w.document.getElementById('save').click();assert.equal(w.__test.get().state.overrides.billing.statements['2027-01'].amount,12345);
  // Real snapshot is optional, kept outside repository and never committed.
  if(process.env.YOHAKU_PRIVATE_FIXTURE){const live=JSON.parse(fs.readFileSync(process.env.YOHAKU_PRIVATE_FIXTURE));await set(live);const before=await page.evaluate(()=>JSON.stringify(__test.flattenLog()));c=await run('2026-11-11');await page.evaluate(()=>__test.render());const after=await page.evaluate(()=>JSON.stringify(__test.flattenLog()));assert.equal(before,after);assert.equal((await page.evaluate(()=>__test.get())).settings.subs.filter(s=>s.name==='1Password').length,1);console.log('Live fixture:',JSON.stringify({livingUsed:c.pace.livingUsed,currentBill:c.lines.find(x=>x.key==='fixed').amt,currentSummary:await page.evaluate(()=>{const b=__test.billSummary('2026-11');return {recorded:b.recorded,forecast:b.forecast}}),future:c.futureBills.map(b=>({month:b.ym,recorded:b.recorded,forecast:b.forecast})),records:live.log.length}));}
  assert.deepEqual(errors,[]); console.log('PASS: app integration scenarios in jsdom, no JS errors.');dom.window.close();

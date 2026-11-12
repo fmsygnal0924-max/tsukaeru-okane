@@ -1,7 +1,7 @@
 /* 使えるお金 service worker
    起動を速くするため「キャッシュを先に返し、裏で更新する」方式。
    更新は次回起動時に反映される。 */
-const CACHE = 'yohaku-billing-v3';
+const CACHE = 'yohaku-dashboard-v4';
 const ASSETS = ['./', './index.html', './billing.js', './manifest.webmanifest', './icons/icon-180.png', './icons/icon-192.png', './icons/icon-512.png'];
 
 self.addEventListener('install', (event) => {
