@@ -1047,6 +1047,12 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     $('home-next-label').textContent = `${Number(nextYm.slice(5))}月に払う${nextBill.confirmed ? '分' : '見込み'}`;
     $('home-next').textContent = yen(nextBill.amount) + '円';
     $('home-next-note').textContent = nextBill.confirmed ? '本人が入力した支払い額' : `未確定：記録 ${yen(nextBill.recorded)}円 ＋ 設定上の予定 ${yen(nextBill.forecast)}円。取込遅れ・サービス未照合で重複の可能性があります。`;
+    const nextCheck = (state.cardChecks || []).filter(x => x.ym === nextYm && x.basis === 'billing').slice(-1)[0];
+    if (!nextBill.confirmed && nextCheck) {
+      $('home-next-label').textContent = `${Number(nextYm.slice(5))}月払い・楽天アプリ表示`;
+      $('home-next').textContent = yen(nextCheck.amount) + '円';
+      $('home-next-note').textContent = `${md(String(nextCheck.at).slice(0,10))}確認・未確定。今後増える場合があります。Yohakuの記録・予定との差は内訳で確認できます。`;
+    }
     if (!$('usage-month').value) $('usage-month').value = c.ym;
     renderUsageDetail();
 
@@ -1177,7 +1183,7 @@ body.pad-open .sheet { max-height: calc(100% - 290px); overflow-y: auto; }
     for (const r of [...u.rows].sort((a,b)=>String(b.date).localeCompare(String(a.date)))) {
       const row=document.createElement('div');row.className='transaction-row';
       const info=document.createElement('div');info.className='transaction-info';
-      const name=document.createElement('strong');name.textContent=r.merchant||r.memo||'店名未確認';
+      const name=document.createElement('strong');name.textContent=billingMeta().transactions[String(r.id)]?.merchant||r.merchant||r.memo||'店名未確認';
       const sub=document.createElement('small');const pay=paymentOf(r);sub.textContent=`${md(r.date)} 利用 ・ ${isSubscription(r)?'サブスク':'それ以外'} ・ ${pay ? Number(pay.month.slice(5))+'月払い'+(pay.source==='statement'?'確認済み':'の見込み') : ''}`;
       info.append(name,sub);const amount=document.createElement('strong');amount.className='transaction-amount';amount.textContent=yen(r.amount)+'円';
       const edit=document.createElement('button');edit.type='button';edit.className='linkbtn';edit.textContent='区分を直す';edit.disabled=!r.id;
